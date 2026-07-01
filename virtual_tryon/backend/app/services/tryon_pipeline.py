@@ -453,6 +453,63 @@ class TryOnPipeline:
         return result, mask_metadata, cache_info
 
     @staticmethod
+    def _pad_bbox(
+        box: tuple[int, int, int, int],
+        size: tuple[int, int],
+        *,
+        x_ratio: float,
+        y_ratio: float,
+    ) -> tuple[int, int, int, int]:
+        left, top, right, bottom = box
+        width = right - left
+        height = bottom - top
+        pad_x = max(8, int(width * x_ratio))
+        pad_y = max(8, int(height * y_ratio))
+        image_w, image_h = size
+        return (
+            max(0, left - pad_x),
+            max(0, top - pad_y),
+            min(image_w, right + pad_x),
+            min(image_h, bottom + pad_y),
+        )
+
+    def _prepare_garment_reference(
+        self,
+        garment: Image.Image,
+        category: TryOnCategory,
+        settings: Settings,
+        mask_experiment,
+        job_dir: Path,
+    ) -> Image.Image:
+        if category not in {*INNERWEAR_BOTTOM_CATEGORIES, *INNERWEAR_TOP_CATEGORIES}:
+            return garment
+
+        try:
+            reference_mask = create_agnostic_mask(
+                garment,
+                category,
+                settings.preprocessing,
+                mask_experiment,
+            )
+        except Exception as exc:
+            logger.warning("Could not extract innerwear garment reference crop: %s", exc)
+            return garment
+
+        mask = reference_mask.soft_mask
+        box = mask.getbbox()
+        if box is None:
+            return garment
+
+        padded = self._pad_bbox(box, garment.size, x_ratio=0.18, y_ratio=0.16)
+        crop = garment.crop(padded).convert("RGB")
+        crop_mask = mask.crop(padded).convert("L")
+        white = Image.new("RGB", crop.size, (255, 255, 255))
+        extracted = Image.composite(crop, white, crop_mask)
+        save_image(mask, job_dir / "garment_reference_mask.png")
+        save_image(extracted, job_dir / "garment_reference_region.png")
+        return extracted
+
+    @staticmethod
     def _commit_sha() -> str:
         try:
             return subprocess.run(
@@ -508,7 +565,16 @@ class TryOnPipeline:
             mask_config=mask_config,
             mask_experiment=mask_experiment,
         )
-        garment_seg = self.segmenter.segment(garment, (width, height))
+        engine_garment = self._prepare_garment_reference(
+            garment,
+            request.category,
+            settings,
+            mask_experiment,
+            job_dir,
+        )
+        if engine_garment is not garment:
+            save_image(engine_garment, job_dir / "garment_engine_input.png")
+        garment_seg = self.segmenter.segment(engine_garment, (width, height))
 
         save_image(mask_result.raw_mask, job_dir / "raw_mask.png")
         save_image(mask_result.dilated_mask, job_dir / "agnostic_mask.png")
