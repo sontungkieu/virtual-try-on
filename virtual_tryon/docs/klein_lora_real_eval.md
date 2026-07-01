@@ -4,31 +4,33 @@ Klein Try-On LoRA is an experimental baseline. IDM-VTON remains the default core
 
 ## Runtime Check
 
-Set `FAL_KEY` only in the shell environment:
+Install the local Klein dependency set in a worker venv and validate model assets:
 
 ```bash
-export FAL_KEY="..."
+/root/.local/bin/uv venv /workspace/venvs/project_phase2_klein --python 3.11
+/root/.local/bin/uv pip install --python /workspace/venvs/project_phase2_klein/bin/python \
+  "diffusers @ git+https://github.com/huggingface/diffusers.git" \
+  "transformers>=4.56" "accelerate>=1.0" "peft>=0.17" "safetensors>=0.4" pillow numpy
+export TRYON_KLEIN_PYTHON=/workspace/venvs/project_phase2_klein/bin/python
+$TRYON_KLEIN_PYTHON scripts/download_klein_local_models.py
 ```
 
-Do not commit `FAL_KEY`, `.env`, fal responses with secrets, or generated output images.
+The downloader uses a Hugging Face token from `huggingface-cli login`,
+`HF_TOKEN`, or `HUGGINGFACE_HUB_TOKEN` without printing it. Accept the
+`black-forest-labs/FLUX.2-klein-9B` license before downloading. Do not commit
+tokens, `.env`, model weights, or generated output images.
 
-Check the runtime:
-
-```bash
-uv run python scripts/check_fal_runtime.py --strict
-```
-
-The checker prints JSON such as:
+Expected validation JSON includes:
 
 ```json
 {
-  "fal_key_set": true,
-  "fal_client_available": true,
-  "klein_lora_available": true
+  "model_index_exists": true,
+  "lora_exists": true
 }
 ```
 
-It never prints the token value. Without `--strict`, missing credentials produce a readable JSON status and exit code 0.
+For the optional fal.ai backend only, set `TRYON_KLEIN_BACKEND=fal_api`,
+`FAL_KEY`, and run `uv run python scripts/check_fal_runtime.py --strict`.
 
 ## Real Ablation Command
 
@@ -60,17 +62,17 @@ data/outputs/klein_lora_ablation_real/
       auto_bottom_reference.png
       status.json
       request_sanitized.json
-      response_sanitized.json
+      local_generation_sanitized.json
     klein_lora_strong_remove_old_shirt/
       result.png
       prompt.txt
       auto_bottom_reference.png
       status.json
       request_sanitized.json
-      response_sanitized.json
+      local_generation_sanitized.json
 ```
 
-If `FAL_KEY` is missing, the script still writes the summary, grid, index, prompt files, auto bottom references, and manual rating template. Klein rows are marked `unavailable`.
+If local model files or dependencies are missing, the script still writes the summary, grid, index, prompt files, auto bottom references, and manual rating template. Klein rows are marked `unavailable`.
 
 ## Secret Scan
 
@@ -79,7 +81,7 @@ Before opening or sharing generated artifacts, scan the output folder:
 ```bash
 uv run python scripts/scan_outputs_for_secrets.py \
   --path data/outputs/klein_lora_ablation_real \
-  --patterns FAL_KEY Authorization Bearer token= key=
+  --patterns FAL_KEY HF_TOKEN HUGGINGFACE_HUB_TOKEN Authorization Bearer token= key=
 ```
 
 The scanner reports only file names, line numbers, and matched pattern names. It does not print matched secret values. If a finding appears, delete or redact the generated output and fix the sanitizer before continuing review.

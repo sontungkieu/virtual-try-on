@@ -9,7 +9,7 @@ export function UploadPerson() {
     <label className="upload-panel">
       <span className="upload-icon"><Upload size={18} /></span>
       <span className="upload-title">Person</span>
-      <span className="upload-file">{personImage?.name ?? "No file selected"}</span>
+      <span className="upload-file" title={personImage?.name}>{personImage?.name ?? "No file selected"}</span>
       <input
         type="file"
         aria-label="Person image"

@@ -17,6 +17,21 @@ const resolutionPresets = [
   { label: "Square 768x768", width: 768, height: 768 }
 ];
 
+function generateButtonLabel(state: ReturnType<typeof useTryOnStore.getState>) {
+  if (!state.loading) return "Generate";
+  const runningStage = state.result?.stages?.find((stage) => stage.status === "running")?.key;
+  const stage = state.result?.current_stage ?? runningStage ?? state.result?.status;
+  const labels: Record<string, string> = {
+    queued: "Queued",
+    running: "Running",
+    generating: "Generating",
+    refining: "Refining",
+    completed: "Finalizing",
+    cancel_requested: "Cancelling"
+  };
+  return `${labels[stage ?? ""] ?? "Working"}...`;
+}
+
 function App() {
   const state = useTryOnStore();
   const setField = state.setField;
@@ -108,6 +123,7 @@ function App() {
   const canCancel = Boolean(
     state.loading && state.jobId && (state.result?.status === "queued" || state.result?.status === "running")
   );
+  const generateLabel = generateButtonLabel(state);
 
   return (
     <main className="app-shell">
@@ -119,7 +135,7 @@ function App() {
           </div>
           <button className="primary-button" type="button" onClick={generate} disabled={state.loading}>
             {state.loading ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
-            Generate
+            {generateLabel}
           </button>
           {canCancel && (
             <button className="secondary-button" type="button" onClick={cancelJob}>

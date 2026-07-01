@@ -130,6 +130,8 @@ def _history_item_from_dir(job_dir) -> TryOnHistoryItem | None:
         started_at=job_payload.get("started_at"),
         finished_at=job_payload.get("finished_at"),
         runtime_seconds=_runtime_seconds(job_payload.get("started_at"), job_payload.get("finished_at")),
+        current_stage=job_payload.get("current_stage"),
+        stages=job_payload.get("stages") or [],
         result_url=job_payload.get("result_url") or _artifact_if_exists(job_id, job_dir, "result.png"),
         inputs=HistoryInputs(
             person_url=_artifact_if_exists(job_id, job_dir, "person.png"),

@@ -9,7 +9,7 @@ This repository contains a ComfyUI-based virtual try-on experiment suite for 15 
 
 The project is designed to run model inference locally on a GPU machine such as RunPod. It does not require calling a hosted image API for the final pipelines.
 
-Python dependencies are managed from `virtual_tryon/pyproject.toml` with `uv`; `virtual_tryon/uv.lock` is the reproducible lockfile. Use `uv add` for new Python dependencies. Real IDM-VTON runtime packages are in the optional `idm` extra, and TensorRT runtime packages are in the optional `tensorrt` extra.
+Python dependencies are managed from `virtual_tryon/pyproject.toml` with `uv`; `virtual_tryon/uv.lock` is the reproducible lockfile. Use `uv add` for new Python dependencies. Real IDM-VTON runtime packages are in the optional `idm` extra, local FLUX.2 Klein packages are in the optional `klein-local` extra, and TensorRT runtime packages are in the optional `tensorrt` extra. `idm` and `klein-local` are declared as conflicting extras because they need different Diffusers/Transformers generations.
 
 ## Current Status
 
@@ -121,9 +121,9 @@ The runtime API supports these try-on categories:
 - `women_underwear`: adult women's underwear bottom via `garment_bottom`.
 - `women_bra`: adult women's bra or upper innerwear via `garment_top`.
 
-The frontend and `/tryon` API can override output resolution and IDM-VTON inference steps per job, so fast preview runs can use lower resolution or fewer steps without changing YAML config. IDM-VTON can also run through the resident worker, which loads the model once and keeps it in GPU memory between jobs. Runtime optimization modes can be measured with `virtual_tryon/scripts/benchmark_idm_runtime_modes.py`; TensorRT defaults to the stable VAE-decode path, while UNet TensorRT experiments require the benchmark's explicit unsafe flag.
+The frontend and `/tryon` API can override output resolution and inference steps per job, so fast preview runs can use lower resolution or fewer steps without changing YAML config. The result panel keeps the artifact manifest and debug preview artifacts collapsed by default; expand `Artifacts` or `Debug artifacts` to inspect per-job files and images. History refreshes again when a job reaches a terminal status. Job status includes per-stage timing for queue, running/preprocess, generation, refinement, and completion; skipped refinement is shown explicitly when FLUX refine is disabled or unavailable. IDM-VTON can also run through the resident worker, which loads the model once and keeps it in GPU memory between jobs. Selecting local `klein_lora` stops the resident IDM worker before loading FLUX.2 Klein, moving the unload/load cost to the model switch. Runtime optimization modes can be measured with `virtual_tryon/scripts/benchmark_idm_runtime_modes.py`; TensorRT defaults to the stable VAE-decode path, while UNet TensorRT experiments require the benchmark's explicit unsafe flag.
 
-Try-on masks are anchored to a dynamic body estimate from the uploaded person image, then fall back to a conservative body box only when foreground estimation is unreliable. Adult innerwear categories use a dedicated anatomy-shaped mask path rather than the broad outerwear rectangles. `men_underwear` and `women_underwear` create a pelvis/brief-shaped mask with smaller dilation and blur. `women_bra` creates a cup/band/strap-shaped mask. Each job writes `mask_metadata.json`, `mask_innerwear_shape.png`, and, when available, `mask_body_silhouette.png` for debugging. Repeated jobs with the same person image, category, resolution, and mask config reuse cached masks from `data/temp/mask_cache`.
+Try-on masks are anchored to a dynamic body estimate from the uploaded person image, then fall back to a conservative body box when foreground estimation is unreliable or touches a horizontal image edge. Upper-body masks extend lower to cover long shirt hems, reducing leftover source garment at the waist. Adult innerwear categories use a dedicated anatomy-shaped mask path rather than broad outerwear rectangles. `men_underwear` and `women_underwear` create a lower pelvis/brief-shaped mask with enough dilation to remove the old garment while staying inside the body silhouette. `women_bra` creates a cup/band/strap-shaped mask. Each job writes `mask_metadata.json`, `mask_innerwear_shape.png`, and, when available, `mask_body_silhouette.png` for debugging. Repeated jobs with the same person image, category, resolution, and mask config reuse cached masks from `data/temp/mask_cache`; mask algorithm changes bump the cache version so old masks are not reused.
 
 Single-item cases run as one pass. Multi-item cases are sequential:
 
@@ -299,6 +299,32 @@ Use the shared RunPod venv through UV:
 export VIRTUAL_ENV=/workspace/venvs/project_phase2
 export PATH=/root/.local/bin:$VIRTUAL_ENV/bin:$PATH
 ```
+
+Local Klein runs through `scripts/klein_diffusers_local_worker.py`. Point
+`TRYON_KLEIN_PYTHON` at a Klein-specific Python environment so the backend can
+keep IDM-VTON's older Diffusers stack:
+
+```bash
+cd /workspace/Project_Phase2/virtual_tryon
+/root/.local/bin/uv venv /workspace/venvs/project_phase2_klein --python 3.11
+/root/.local/bin/uv pip install --python /workspace/venvs/project_phase2_klein/bin/python \
+  "diffusers @ git+https://github.com/huggingface/diffusers.git" \
+  "transformers>=4.56" "accelerate>=1.0" "peft>=0.17" "safetensors>=0.4" pillow numpy
+export TRYON_KLEIN_PYTHON=/workspace/venvs/project_phase2_klein/bin/python
+```
+
+Then download assets after accepting the Hugging Face model license and logging
+in with `huggingface-cli login` or setting `HF_TOKEN` only in the shell
+environment:
+
+```bash
+$TRYON_KLEIN_PYTHON scripts/download_klein_local_models.py
+```
+
+The script validates `models/flux2-klein-9b/model_index.json` and
+`models/loras/flux-klein-tryon.safetensors`. Do not commit or log tokens. The
+old fal.ai path remains available by setting `TRYON_KLEIN_BACKEND=fal_api` and
+`FAL_KEY` outside the repo.
 
 Start ComfyUI:
 

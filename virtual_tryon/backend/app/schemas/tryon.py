@@ -17,6 +17,7 @@ TryOnCategory = Literal[
 INNERWEAR_BOTTOM_CATEGORIES = {"men_underwear", "women_underwear"}
 INNERWEAR_TOP_CATEGORIES = {"women_bra"}
 JobStatus = Literal["queued", "running", "completed", "failed", "cancelled", "cancel_requested"]
+StageStatus = Literal["pending", "running", "completed", "skipped", "failed", "cancelled"]
 
 
 class ErrorDetail(BaseModel):
@@ -52,6 +53,15 @@ class QualityScores(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class PipelineStage(BaseModel):
+    key: str
+    label: str
+    status: StageStatus = "pending"
+    started_at: str | None = None
+    finished_at: str | None = None
+    runtime_seconds: float | None = None
+
+
 class TryOnResponse(BaseModel):
     job_id: str
     status: JobStatus
@@ -67,6 +77,8 @@ class TryOnStatusResponse(TryOnResponse):
     started_at: str | None = None
     finished_at: str | None = None
     updated_at: str | None = None
+    current_stage: str | None = None
+    stages: list[PipelineStage] = Field(default_factory=list)
     cancel_requested: bool = False
     engine_status: dict[str, str] = Field(default_factory=dict)
     artifact_manifest: dict | None = None
@@ -101,6 +113,8 @@ class TryOnHistoryItem(BaseModel):
     started_at: str | None = None
     finished_at: str | None = None
     runtime_seconds: float | None = None
+    current_stage: str | None = None
+    stages: list[PipelineStage] = Field(default_factory=list)
     result_url: str | None = None
     inputs: HistoryInputs = Field(default_factory=HistoryInputs)
     config: GenerationConfigSummary = Field(default_factory=GenerationConfigSummary)

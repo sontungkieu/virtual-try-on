@@ -50,6 +50,10 @@ def test_tryon_accepts_upper_body_request(client, png_file):
     payload = response.json()
     assert payload["status"] == "completed"
     assert payload["result_url"]
+    stages = {stage["key"]: stage for stage in payload["stages"]}
+    assert payload["current_stage"] == "completed"
+    assert stages["generating"]["status"] == "completed"
+    assert stages["generating"]["runtime_seconds"] is not None
     assert payload["debug"]["mask_url"]
 
 
@@ -75,6 +79,8 @@ def test_tryon_accepts_adult_innerwear_categories(client, png_file, category, ga
     payload = response.json()
     assert payload["status"] == "completed"
     assert payload["result_url"]
+    stages = {stage["key"]: stage for stage in payload["stages"]}
+    assert stages["refining"]["status"] == "skipped"
 
 
 def test_engine_mode_default_remains_idm(client, png_file):
@@ -126,6 +132,8 @@ def test_tryon_accepts_generation_overrides(client, png_file):
     assert newest["config"]["output_height"] == 768
     assert newest["config"]["steps"] == 12
     assert newest["finished_at"]
+    assert newest["current_stage"] == "completed"
+    assert {stage["key"] for stage in newest["stages"]} >= {"queued", "running", "generating", "refining", "completed"}
 
 
 def test_tryon_rejects_invalid_generation_overrides(client, png_file):

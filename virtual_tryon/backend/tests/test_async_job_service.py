@@ -43,6 +43,8 @@ def test_async_job_service_queued_running_completed(tmp_path):
 
     queued = service.queue_tryon_job(request)
     assert queued.status == "queued"
+    assert queued.current_stage == "queued"
+    assert {stage.key: stage.status for stage in queued.stages}["queued"] == "running"
 
     service.run_queued_job(request)
     completed = service.get_job("async_ok")
@@ -50,10 +52,16 @@ def test_async_job_service_queued_running_completed(tmp_path):
     assert completed is not None
     assert completed.status == "completed"
     assert completed.result_url
+    assert completed.current_stage == "completed"
+    stages = {stage.key: stage for stage in completed.stages}
+    assert stages["queued"].status == "completed"
+    assert stages["generating"].runtime_seconds is not None
+    assert stages["refining"].status == "skipped"
     job_json = settings.storage.outputs_dir / "async_ok" / "job.json"
     assert job_json.exists()
     payload = json.loads(job_json.read_text(encoding="utf-8"))
     assert payload["status"] == "completed"
+    assert payload["stages"]
     assert payload["started_at"]
     assert payload["finished_at"]
 

@@ -10,6 +10,16 @@ export type Category =
   | "women_bra";
 export type EngineMode = "" | "idm_vton" | "idm_vton_flux" | "idm_mask_expanded" | "idm_mask_expanded_flux" | "klein_lora" | "catvton";
 export type PromptVariant = "default" | "strong_remove_old_garment" | "identity_strict";
+export type StageStatus = "pending" | "running" | "completed" | "skipped" | "failed" | "cancelled";
+
+export type PipelineStage = {
+  key: string;
+  label: string;
+  status: StageStatus;
+  started_at?: string | null;
+  finished_at?: string | null;
+  runtime_seconds?: number | null;
+};
 
 export type ArtifactManifest = {
   job_id: string;
@@ -28,6 +38,8 @@ export type TryOnResult = {
   error?: string | null;
   error_code?: string | null;
   seed?: number | null;
+  current_stage?: string | null;
+  stages?: PipelineStage[];
   engine_status?: Record<string, string>;
   artifact_manifest?: ArtifactManifest | null;
   debug?: {
@@ -59,6 +71,8 @@ export type TryOnHistoryItem = {
   started_at?: string | null;
   finished_at?: string | null;
   runtime_seconds?: number | null;
+  current_stage?: string | null;
+  stages?: PipelineStage[];
   result_url?: string | null;
   inputs: {
     person_url?: string | null;

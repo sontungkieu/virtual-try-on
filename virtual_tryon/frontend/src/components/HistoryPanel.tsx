@@ -18,6 +18,27 @@ function formatRuntime(value?: number | null) {
   return `${value.toFixed(value < 10 ? 1 : 0)}s`;
 }
 
+function formatStageTimings(item: TryOnHistoryItem) {
+  if (!item.stages?.length) return null;
+  const labels: Record<string, string> = {
+    queued: "Queue",
+    running: "Run",
+    generating: "Gen",
+    refining: "Refine",
+    completed: "Done"
+  };
+  return item.stages
+    .filter((stage) => stage.status !== "pending")
+    .map((stage) => {
+      const value =
+        stage.status === "skipped" || stage.status === "failed" || stage.status === "cancelled"
+          ? stage.status
+          : formatRuntime(stage.runtime_seconds);
+      return `${labels[stage.key] ?? stage.label}: ${value}`;
+    })
+    .join(" · ");
+}
+
 function inputImages(item: TryOnHistoryItem) {
   return [
     ["Person", item.inputs.person_url],
@@ -29,6 +50,7 @@ function inputImages(item: TryOnHistoryItem) {
 
 export function HistoryPanel() {
   const resultJobId = useTryOnStore((state) => state.result?.job_id);
+  const resultStatus = useTryOnStore((state) => state.result?.status);
   const setField = useTryOnStore((state) => state.setField);
   const [items, setItems] = useState<TryOnHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -50,8 +72,16 @@ export function HistoryPanel() {
   }
 
   useEffect(() => {
-    void refresh();
-  }, [resultJobId]);
+    if (
+      !resultJobId ||
+      resultStatus === "queued" ||
+      resultStatus === "completed" ||
+      resultStatus === "failed" ||
+      resultStatus === "cancelled"
+    ) {
+      void refresh();
+    }
+  }, [resultJobId, resultStatus]);
 
   return (
     <section className="history-panel" aria-label="History">
@@ -64,6 +94,7 @@ export function HistoryPanel() {
       <div className="history-list">
         {items.map((item) => {
           const resultUrl = resolveAssetUrl(item.result_url);
+          const stageTimings = formatStageTimings(item);
           return (
             <button className="history-item" type="button" onClick={() => loadJob(item.job_id)} key={item.job_id}>
               <div className="history-images">
@@ -82,6 +113,7 @@ export function HistoryPanel() {
                 <strong>{item.config.category ?? "unknown"} · {item.status}</strong>
                 <span>{item.config.output_width ?? "?"}x{item.config.output_height ?? "?"} · {item.config.steps ?? "?"} steps · {item.config.engine ?? "engine"}</span>
                 <span>{formatTime(item.finished_at ?? item.created_at)} · {formatRuntime(item.runtime_seconds)}</span>
+                {stageTimings ? <span className="history-stage-times">{stageTimings}</span> : null}
                 <small>{item.job_id}</small>
               </div>
             </button>

@@ -20,8 +20,8 @@ preprocessing:
   preserve_face: true
   preserve_hands: true
   preserve_hair: true
-  innerwear_dilation_px: 6
-  innerwear_blur_radius: 4
+  innerwear_dilation_px: 12
+  innerwear_blur_radius: 5
   innerwear_use_silhouette_clip: true
   innerwear_silhouette_clip_dilation_px: 8
   mask_cache_enabled: true

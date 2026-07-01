@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.observability.metrics import metrics
-from app.schemas.tryon import TryOnStatusResponse
+from app.schemas.tryon import PipelineStage, StageStatus, TryOnStatusResponse
 from app.services.artifact_service import write_artifact_manifest
 from app.services.storage_service import StorageService
 from app.services.tryon_pipeline import PipelineRequest, TryOnPipeline
@@ -22,6 +22,16 @@ from app.utils.errors import (
 
 
 logger = logging.getLogger(__name__)
+
+
+STAGE_ORDER = ("queued", "running", "generating", "refining", "completed")
+STAGE_LABELS = {
+    "queued": "Queued",
+    "running": "Running",
+    "generating": "Generating",
+    "refining": "Refining",
+    "completed": "Completed",
+}
 
 
 class JobService:
@@ -40,6 +50,70 @@ class JobService:
     @staticmethod
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _parse_time(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    @classmethod
+    def _runtime_seconds(cls, started_at: str | None, finished_at: str | None) -> float | None:
+        started = cls._parse_time(started_at)
+        finished = cls._parse_time(finished_at)
+        if not started or not finished:
+            return None
+        return max(0.0, round((finished - started).total_seconds(), 3))
+
+    @staticmethod
+    def _default_stages() -> list[PipelineStage]:
+        return [PipelineStage(key=key, label=STAGE_LABELS[key]) for key in STAGE_ORDER]
+
+    @classmethod
+    def _ensure_stages(cls, job: TryOnStatusResponse) -> None:
+        if not job.stages:
+            job.stages = cls._default_stages()
+            return
+        existing = {stage.key: stage for stage in job.stages}
+        normalized = [existing.get(key) or PipelineStage(key=key, label=STAGE_LABELS[key]) for key in STAGE_ORDER]
+        normalized.extend(stage for stage in job.stages if stage.key not in STAGE_ORDER)
+        job.stages = normalized
+
+    @staticmethod
+    def _stage_by_key(job: TryOnStatusResponse, key: str) -> PipelineStage | None:
+        return next((stage for stage in job.stages if stage.key == key), None)
+
+    @classmethod
+    def _apply_stage(
+        cls,
+        job: TryOnStatusResponse,
+        key: str,
+        status: StageStatus,
+        *,
+        when: str | None = None,
+    ) -> None:
+        cls._ensure_stages(job)
+        stage = cls._stage_by_key(job, key)
+        if stage is None:
+            stage = PipelineStage(key=key, label=STAGE_LABELS.get(key, key.replace("_", " ").title()))
+            job.stages.append(stage)
+
+        now = when or cls._now()
+        stage.status = status
+        if status == "running":
+            stage.started_at = stage.started_at or now
+            stage.finished_at = None
+            stage.runtime_seconds = None
+            job.current_stage = key
+        elif status in {"completed", "skipped", "failed", "cancelled"}:
+            stage.started_at = stage.started_at or now
+            stage.finished_at = stage.finished_at or now
+            stage.runtime_seconds = cls._runtime_seconds(stage.started_at, stage.finished_at)
+            job.current_stage = key
+        job.updated_at = now
 
     @property
     def _engine(self) -> str:
@@ -82,10 +156,25 @@ class JobService:
 
     def _save_job(self, job: TryOnStatusResponse) -> TryOnStatusResponse:
         with self._jobs_guard:
+            self._ensure_stages(job)
             self.jobs[job.job_id] = job
             self.storage.save_json(job.job_id, "job.json", job.model_dump(mode="json"))
             metrics.set_queue_size(self._queue_size())
         return job
+
+    def _mark_stage(self, job_id: str, key: str, status: StageStatus) -> None:
+        job = self.get_job(job_id)
+        if job is None:
+            return
+        self._apply_stage(job, key, status)
+        stage = self._stage_by_key(job, key)
+        self._save_job(job)
+        self._log_event(
+            job_id,
+            key,
+            status,
+            runtime_seconds=stage.runtime_seconds if stage else None,
+        )
 
     def _load_job_from_disk(self, job_id: str) -> TryOnStatusResponse | None:
         path = self._job_json_path(job_id)
@@ -112,6 +201,32 @@ class JobService:
         return job
 
     def _finalize(self, job: TryOnStatusResponse, runtime_seconds: float) -> TryOnStatusResponse:
+        current = self.get_job(job.job_id)
+        if current is not None:
+            job.stages = current.stages
+            job.current_stage = current.current_stage
+            job.cancel_requested = job.cancel_requested or current.cancel_requested
+        finished = job.finished_at or self._now()
+        if job.status == "completed":
+            for key in ("queued", "running", "generating"):
+                stage = self._stage_by_key(job, key)
+                if stage is None or stage.status in {"pending", "running"}:
+                    self._apply_stage(job, key, "completed", when=finished)
+            refining = self._stage_by_key(job, "refining")
+            if refining is None or refining.status == "pending":
+                self._apply_stage(job, "refining", "skipped", when=finished)
+            self._apply_stage(job, "completed", "completed", when=finished)
+        elif job.status == "cancelled":
+            active = job.current_stage or "queued"
+            self._apply_stage(job, active, "cancelled", when=finished)
+            self._apply_stage(job, "completed", "cancelled", when=finished)
+        elif job.status == "failed":
+            active = job.current_stage
+            if active and active != "completed":
+                stage = self._stage_by_key(job, active)
+                if stage is None or stage.status in {"pending", "running"}:
+                    self._apply_stage(job, active, "failed", when=finished)
+            self._apply_stage(job, "completed", "failed", when=finished)
         job = self._attach_engine_status(job)
         self._save_job(job)
         _, manifest = write_artifact_manifest(
@@ -178,6 +293,7 @@ class JobService:
                     time.monotonic() - started,
                 )
             try:
+                request.progress_callback = lambda stage, status: self._mark_stage(request.job_id, stage, status)
                 response = self.pipeline.run(request)
                 runtime = time.monotonic() - started
                 current = self.get_job(request.job_id)
@@ -284,6 +400,8 @@ class JobService:
             started_at=now,
             updated_at=now,
         )
+        self._apply_stage(running, "queued", "completed", when=now)
+        self._apply_stage(running, "running", "running", when=now)
         self._save_job(running)
         self._log_event(request.job_id, "pipeline", "running")
         try:
@@ -297,6 +415,7 @@ class JobService:
             raise QueueFullError()
         now = self._now()
         queued = TryOnStatusResponse(job_id=request.job_id, status="queued", created_at=now, updated_at=now)
+        self._apply_stage(queued, "queued", "running", when=now)
         self._log_event(request.job_id, "queue", "queued")
         return self._save_job(queued)
 
@@ -317,6 +436,8 @@ class JobService:
             job.status = "running"
             job.started_at = self._now()
             job.updated_at = job.started_at
+            self._apply_stage(job, "queued", "completed", when=job.started_at)
+            self._apply_stage(job, "running", "running", when=job.started_at)
             self._save_job(job)
             self._log_event(request.job_id, "pipeline", "running")
             self._run_attempts(
@@ -338,6 +459,7 @@ class JobService:
             job.error_code = "CANCELLED"
             job.finished_at = self._now()
             job.updated_at = job.finished_at
+            self._apply_stage(job, "queued", "cancelled", when=job.finished_at)
             return self._finalize(job, 0.0)
         if job.status == "running":
             job.status = "cancel_requested"

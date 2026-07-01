@@ -50,7 +50,7 @@ The committed evaluation set contains one valid upper-body sample for repeatable
 
 ## Frontend Demo
 
-The frontend provides person and garment upload, category and prompt controls, asynchronous status polling, a job timeline, final image display, quality summary, artifact links, and job ID copy. API errors are rendered from the backend's structured error schema.
+The frontend provides person and garment upload, category and prompt controls, asynchronous status polling, a timed job timeline, final image display, quality summary, artifact links, and job ID copy. API errors are rendered from the backend's structured error schema.
 
 ## Observability
 

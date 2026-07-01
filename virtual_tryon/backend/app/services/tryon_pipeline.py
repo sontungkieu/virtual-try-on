@@ -4,8 +4,9 @@ import hashlib
 import json
 import logging
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from PIL import Image
 
@@ -42,7 +43,7 @@ from app.utils.seed import normalize_seed, set_seed
 logger = logging.getLogger(__name__)
 
 
-MASK_CACHE_VERSION = "mask-v3-dynamic-body"
+MASK_CACHE_VERSION = "mask-v4-garment-coverage"
 MASK_CACHE_IMAGE_FILES = {
     "raw_mask": ("raw_mask.png", "L"),
     "dilated_mask": ("agnostic_mask.png", "L"),
@@ -95,6 +96,7 @@ class PipelineRequest:
     output_width: int | None = None
     output_height: int | None = None
     steps: int | None = None
+    progress_callback: Callable[[str, str], None] | None = field(default=None, repr=False, compare=False)
 
 
 class TryOnPipeline:
@@ -104,6 +106,15 @@ class TryOnPipeline:
         self.segmenter = GarmentSegmenter()
         self.human_parser = HumanParser()
         self.densepose = DensePoseEstimator()
+
+    @staticmethod
+    def _emit_progress(request: PipelineRequest, stage: str, status: str) -> None:
+        if request.progress_callback is None:
+            return
+        try:
+            request.progress_callback(stage, status)
+        except Exception:
+            logger.warning("Progress callback failed for job %s stage %s=%s", request.job_id, stage, status)
 
     def _select_garment(self, request: PipelineRequest) -> Image.Image:
         if request.category in {"upper_body", *INNERWEAR_TOP_CATEGORIES} and request.garment_top:
@@ -126,11 +137,15 @@ class TryOnPipeline:
         if request.output_width:
             mode_settings.image.output_width = request.output_width
             mode_settings.idm_vton.default_width = request.output_width
+            mode_settings.klein_tryon_lora.default_width = request.output_width
         if request.output_height:
             mode_settings.image.output_height = request.output_height
             mode_settings.idm_vton.default_height = request.output_height
+            mode_settings.klein_tryon_lora.default_height = request.output_height
         if request.steps:
             mode_settings.idm_vton.steps = request.steps
+            mode_settings.klein_tryon_lora.num_inference_steps = request.steps
+            mode_settings.klein_tryon_lora.steps = request.steps
         if not mode:
             return mode_settings
         if mode == "idm_vton":
@@ -454,6 +469,7 @@ class TryOnPipeline:
         settings = self._settings_for_request(request)
         seed = normalize_seed(request.seed)
         set_seed(seed)
+        self._emit_progress(request, "running", "running")
 
         job_dir = self.storage.job_dir(request.job_id)
         width = settings.image.output_width
@@ -517,6 +533,7 @@ class TryOnPipeline:
         save_image(garment_seg.normalized_crop, job_dir / "garment_normalized.png")
         if densepose.densepose_path is None:
             save_image(person, job_dir / "densepose_placeholder.png")
+        self._emit_progress(request, "running", "completed")
 
         engine = create_tryon_engine(settings)
         inputs = TryOnInputs(
@@ -543,10 +560,13 @@ class TryOnPipeline:
             },
         )
 
+        self._emit_progress(request, "generating", "running")
         try:
             core = engine.run(inputs)
-        except ModelUnavailableError:
+        except Exception:
+            self._emit_progress(request, "generating", "failed")
             raise
+        self._emit_progress(request, "generating", "completed")
 
         core_path = save_image(core.image, job_dir / "core_output.png")
         core_image = core.image
@@ -585,8 +605,9 @@ class TryOnPipeline:
             "idm_mask_expanded_flux",
         }
         if use_refiner and settings.refinement.enabled and settings.flux_refiner.enabled:
-            refiner = create_refiner(settings)
+            self._emit_progress(request, "refining", "running")
             try:
+                refiner = create_refiner(settings)
                 refined = refiner.refine(
                     core_image,
                     active_refine_mask,
@@ -598,6 +619,7 @@ class TryOnPipeline:
                 refined_path = save_image(refined_image, job_dir / "refined_output.png")
                 refiner_status = "success"
                 engine_status["flux_refiner"] = "success"
+                self._emit_progress(request, "refining", "completed")
             except ModelUnavailableError as exc:
                 message = f"Refiner unavailable; returning core output. {exc}"
                 quality.notes.append(message)
@@ -605,6 +627,7 @@ class TryOnPipeline:
                 (job_dir / "flux_refiner_error.txt").write_text(message, encoding="utf-8")
                 refiner_status = "skipped"
                 engine_status["flux_refiner"] = "skipped"
+                self._emit_progress(request, "refining", "skipped")
                 logger.warning("Skipping refiner: %s", exc)
             except Exception as exc:
                 message = f"Refiner failed; returning core output. {exc}"
@@ -613,7 +636,10 @@ class TryOnPipeline:
                 (job_dir / "flux_refiner_error.txt").write_text(message, encoding="utf-8")
                 refiner_status = "failed"
                 engine_status["flux_refiner"] = "failed"
+                self._emit_progress(request, "refining", "failed")
                 logger.exception("Refiner failed; falling back to core output.")
+        else:
+            self._emit_progress(request, "refining", "skipped")
 
         quality_report = build_quality_report(
             person,
@@ -636,17 +662,19 @@ class TryOnPipeline:
             refined_path = save_image(current_image, job_dir / "refined_output.png")
             quality_report["repair"] = repaired.metadata
 
+        self._emit_progress(request, "completed", "running")
         result_path = save_image(current_image, job_dir / "result.png")
         quality_report_path = self.storage.save_json(request.job_id, "quality_report.json", quality_report)
         mask_metadata_path = self.storage.save_json(request.job_id, "mask_metadata.json", mask_metadata)
+        active_engine_settings = (
+            settings.idm_vton
+            if settings.pipeline.engine in {"idm_vton", "mock"}
+            else getattr(settings, settings.pipeline.engine)
+        )
         engine_config = {
             "pipeline_engine": settings.pipeline.engine,
             "runtime": settings.runtime.model_dump(mode="json"),
-            "engine": (
-                settings.idm_vton.model_dump(mode="json")
-                if settings.pipeline.engine in {"idm_vton", "mock"}
-                else getattr(settings, settings.pipeline.engine).model_dump(mode="json")
-            ),
+            "engine": active_engine_settings.model_dump(mode="json"),
         }
         metadata = {
             "job_id": request.job_id,
@@ -654,7 +682,7 @@ class TryOnPipeline:
             "generation_config": {
                 "output_width": width,
                 "output_height": height,
-                "steps": settings.idm_vton.steps,
+                "steps": active_engine_settings.num_inference_steps or active_engine_settings.steps,
                 "requested_output_width": request.output_width,
                 "requested_output_height": request.output_height,
                 "requested_steps": request.steps,

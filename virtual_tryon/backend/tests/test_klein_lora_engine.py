@@ -128,6 +128,91 @@ def test_klein_lora_availability_missing_token(monkeypatch):
     assert "FAL_KEY" in availability.status
 
 
+def test_klein_lora_local_availability_uses_model_paths(monkeypatch, tmp_path):
+    monkeypatch.setattr(KleinTryOnLoraEngine, "_diffusers_local_import_error", staticmethod(lambda: None))
+    model_dir = tmp_path / "flux2-klein-9b"
+    model_dir.mkdir()
+    (model_dir / "model_index.json").write_text("{}", encoding="utf-8")
+    lora_path = tmp_path / "flux-klein-tryon.safetensors"
+    lora_path.write_bytes(b"fake")
+
+    engine = KleinTryOnLoraEngine(
+        _config(
+            backend="diffusers_local",
+            model_path=model_dir,
+            lora_path=lora_path,
+        )
+    )
+
+    availability = engine.is_available()
+    assert availability.available
+    assert "FAL_KEY" not in availability.status
+
+
+def test_klein_lora_local_run_uses_diffusers_pipeline(monkeypatch, tmp_path):
+    model_dir = tmp_path / "flux2-klein-9b"
+    model_dir.mkdir()
+    (model_dir / "model_index.json").write_text("{}", encoding="utf-8")
+    lora_path = tmp_path / "flux-klein-tryon.safetensors"
+    lora_path.write_bytes(b"fake")
+    captured: dict = {}
+    released = {"idm": False}
+
+    class FakeCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+    class FakeGenerator:
+        def __init__(self, device: str):
+            captured["generator_device"] = device
+
+        def manual_seed(self, seed: int):
+            captured["seed"] = seed
+            return self
+
+    fake_torch = types.SimpleNamespace(cuda=FakeCuda(), Generator=FakeGenerator)
+
+    class FakePipe:
+        def __call__(self, **kwargs):
+            captured.update(kwargs)
+            return types.SimpleNamespace(images=[Image.new("RGB", (80, 120), (10, 90, 40))])
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(KleinTryOnLoraEngine, "_diffusers_local_import_error", staticmethod(lambda: None))
+    monkeypatch.setattr(KleinTryOnLoraEngine, "_load_diffusers_local_pipe", lambda self: FakePipe())
+    monkeypatch.setattr(
+        KleinTryOnLoraEngine,
+        "_release_idm_resident_worker",
+        lambda self: released.__setitem__("idm", True),
+    )
+
+    engine = KleinTryOnLoraEngine(
+        _config(
+            backend="diffusers_local",
+            model_path=model_dir,
+            lora_path=lora_path,
+            default_width=128,
+            default_height=192,
+            num_inference_steps=4,
+        )
+    )
+    result = engine.run(_inputs(tmp_path))
+
+    assert result.image.size == (80, 120)
+    assert released["idm"] is True
+    assert captured["seed"] == 42
+    assert captured["height"] == 192
+    assert captured["width"] == 128
+    assert captured["num_inference_steps"] == 4
+    assert len(captured["image"]) == 3
+    assert (tmp_path / "klein_lora_result.png").exists()
+    local_payload = json.loads((tmp_path / "local_generation_sanitized.json").read_text(encoding="utf-8"))
+    assert local_payload["backend"] == "diffusers_local"
+    assert local_payload["local_files_only"] is True
+    assert local_payload["lora_path"] == str(lora_path)
+
+
 def test_klein_lora_bottom_crop_from_person(monkeypatch, tmp_path):
     monkeypatch.delenv("FAL_KEY", raising=False)
     engine = KleinTryOnLoraEngine(_config())

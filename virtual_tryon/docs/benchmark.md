@@ -59,7 +59,7 @@ Modes:
 - `idm_mask_expanded_flux`: expanded-mask IDM-VTON plus optional FLUX refiner.
 - `repair`: IDM-VTON plus accepted FLUX output plus repair.
 - `catvton`: CatVTON baseline.
-- `klein_lora`: fal.ai FLUX.2 Klein 9B Try-On LoRA experimental baseline.
+- `klein_lora`: local FLUX.2 Klein 9B + Try-On LoRA experimental baseline.
 
 If a baseline engine is unavailable, its row is marked `unavailable` and the benchmark continues.
 
@@ -142,7 +142,7 @@ data/outputs/benchmark_{timestamp}/
     klein_lora/
 ```
 
-`klein_lora` rows include `prompt_path`, `engine_status`, and `error_code`. When `FAL_KEY` or `fal_client` is missing, the row is skipped with `ENGINE_UNAVAILABLE`; this is expected on CI and local CPU-only environments.
+`klein_lora` rows include `prompt_path`, `engine_status`, and `error_code`. When local Klein model files, `klein-local` dependencies, or optional fal.ai credentials are missing for the selected backend, the row is skipped with `ENGINE_UNAVAILABLE`; this is expected on CI and local CPU-only environments.
 
 ## Review Gallery
 
@@ -221,13 +221,20 @@ uv run python scripts/run_klein_lora_ablation.py \
   --output data/outputs/klein_lora_ablation_test
 ```
 
-Without `FAL_KEY`, the script still creates `summary.csv`, `summary.json`, `comparison_grid.png`, `comparison_index.html`, and `manual_ratings_klein_lora.csv`; Klein rows are marked unavailable and include sanitized status artifacts. With `FAL_KEY` and the fal client installed, the same command attempts the real endpoint.
+Without the local Klein base model, LoRA file, or `klein-local` dependencies, the script still creates `summary.csv`, `summary.json`, `comparison_grid.png`, `comparison_index.html`, and `manual_ratings_klein_lora.csv`; Klein rows are marked unavailable and include sanitized status artifacts. With `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and a Diffusers build that exports `Flux2KleinPipeline`, the same command attempts the local endpoint.
 
-Before a real run, check credentials and dependencies without printing secrets:
+Before a local run, download/validate assets:
 
 ```bash
-uv run python scripts/check_fal_runtime.py --strict
+/root/.local/bin/uv venv /workspace/venvs/project_phase2_klein --python 3.11
+/root/.local/bin/uv pip install --python /workspace/venvs/project_phase2_klein/bin/python \
+  "diffusers @ git+https://github.com/huggingface/diffusers.git" \
+  "transformers>=4.56" "accelerate>=1.0" "peft>=0.17" "safetensors>=0.4" pillow numpy
+export TRYON_KLEIN_PYTHON=/workspace/venvs/project_phase2_klein/bin/python
+$TRYON_KLEIN_PYTHON scripts/download_klein_local_models.py
 ```
+
+`scripts/check_fal_runtime.py --strict` is still available only for the optional `TRYON_KLEIN_BACKEND=fal_api` path.
 
 The comparison grid contains:
 

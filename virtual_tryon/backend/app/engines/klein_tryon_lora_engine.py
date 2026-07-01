@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import threading
 import time
 import urllib.request
 from urllib.parse import urlsplit, urlunsplit
@@ -10,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image
+from PIL import ImageOps
 
 from app.core.config import EngineConfig
 from app.engines.base import TryOnInputs, TryOnResult
@@ -20,6 +24,8 @@ from app.utils.image_io import save_image
 
 SENSITIVE_KEY_PARTS = {"token", "key", "authorization", "secret", "credential"}
 SUPPORTED_BACKENDS = {"fal_api", "diffusers_local", "disabled"}
+_LOCAL_PIPE_CACHE: dict[str, Any] = {}
+_LOCAL_PIPE_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -70,6 +76,39 @@ def _sanitize_payload(value: Any) -> Any:
     return value
 
 
+def _patch_sdpa_enable_gqa() -> None:
+    try:
+        import torch
+    except ImportError:
+        return
+
+    func = torch.nn.functional.scaled_dot_product_attention
+    if getattr(func, "_vton_gqa_compat", False):
+        return
+
+    def wrapped(query, key, value, *args, **kwargs):
+        enable_gqa = bool(kwargs.pop("enable_gqa", False))
+        if enable_gqa and query.ndim >= 4 and key.ndim >= 4:
+            q_heads = query.shape[-3]
+            k_heads = key.shape[-3]
+            if q_heads != k_heads and q_heads % k_heads == 0:
+                repeat = q_heads // k_heads
+                key = key.repeat_interleave(repeat, dim=-3)
+                value = value.repeat_interleave(repeat, dim=-3)
+        return func(query, key, value, *args, **kwargs)
+
+    wrapped._vton_gqa_compat = True  # type: ignore[attr-defined]
+    torch.nn.functional.scaled_dot_product_attention = wrapped
+
+
+def _fit_canvas(image: Image.Image, size: tuple[int, int]) -> Image.Image:
+    image = ImageOps.exif_transpose(image.convert("RGB"))
+    contained = ImageOps.contain(image, size, Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", size, "white")
+    canvas.paste(contained, ((size[0] - contained.width) // 2, (size[1] - contained.height) // 2))
+    return canvas
+
+
 class KleinTryOnLoraEngine:
     name = "klein_tryon_lora"
 
@@ -85,6 +124,127 @@ class KleinTryOnLoraEngine:
         repo = self.config.lora_repo or "fal/flux-klein-9b-virtual-tryon-lora"
         weight = self.config.lora_weight_api or "flux-klein-tryon.safetensors"
         return f"{repo.rstrip('/')}/{weight}"
+
+    @property
+    def local_model_dir(self) -> Path | None:
+        if self.config.model_path:
+            return self.config.model_path
+        return self.config.checkpoint_dir
+
+    @property
+    def output_size(self) -> tuple[int, int]:
+        width = int(self.config.default_width or self.config.resolution or 768)
+        height = int(self.config.default_height or self.config.resolution or 1024)
+        return width, height
+
+    @staticmethod
+    def _diffusers_local_import_error() -> str | None:
+        try:
+            import torch  # noqa: F401
+            import peft  # noqa: F401
+            from diffusers import Flux2KleinPipeline  # noqa: F401
+        except ImportError as exc:
+            return f"{type(exc).__name__}: {exc}"
+        return None
+
+    def _local_cache_key(self) -> str:
+        return json.dumps(
+            {
+                "model_dir": str(self.local_model_dir),
+                "lora_path": str(self.config.lora_path),
+            },
+            sort_keys=True,
+        )
+
+    @property
+    def local_worker_python(self) -> str:
+        return os.getenv("TRYON_KLEIN_PYTHON") or sys.executable
+
+    def _local_worker_check_error(self) -> str | None:
+        if not self.config.entrypoint:
+            return self._diffusers_local_import_error()
+        if not self.config.entrypoint.exists():
+            return f"worker entrypoint not found: {self.config.entrypoint}"
+        command = [
+            self.local_worker_python,
+            str(self.config.entrypoint),
+            "--check",
+            "--model-dir",
+            str(self.local_model_dir),
+            "--lora-path",
+            str(self.config.lora_path),
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=self.config.entrypoint.parent,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            return f"worker runtime check failed: {type(exc).__name__}: {exc}"
+        if completed.returncode != 0:
+            stderr = completed.stderr.strip()[-1000:]
+            return f"worker runtime check failed: {stderr or completed.stdout.strip()[-1000:]}"
+        return None
+
+    def _load_diffusers_local_pipe(self):
+        model_dir = self.local_model_dir
+        lora_path = self.config.lora_path
+        if model_dir is None:
+            raise ModelUnavailableError("Klein Try-On LoRA local model path is not configured.")
+        if lora_path is None:
+            raise ModelUnavailableError("Klein Try-On LoRA local LoRA path is not configured.")
+
+        cache_key = self._local_cache_key()
+        with _LOCAL_PIPE_LOCK:
+            cached = _LOCAL_PIPE_CACHE.get(cache_key)
+            if cached is not None:
+                if hasattr(cached, "set_adapters"):
+                    cached.set_adapters(["tryon"], adapter_weights=[float(self.config.lora_scale)])
+                return cached
+
+            _patch_sdpa_enable_gqa()
+            import torch
+            from diffusers import Flux2KleinPipeline
+
+            if torch.cuda.is_available():
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.set_float32_matmul_precision("high")
+
+            try:
+                pipe = Flux2KleinPipeline.from_pretrained(
+                    model_dir,
+                    torch_dtype=torch.bfloat16,
+                    local_files_only=True,
+                    low_cpu_mem_usage=True,
+                )
+            except TypeError:
+                pipe = Flux2KleinPipeline.from_pretrained(
+                    model_dir,
+                    torch_dtype=torch.bfloat16,
+                    local_files_only=True,
+                )
+            if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
+                pipe.vae.enable_tiling()
+            if torch.cuda.is_available() and hasattr(pipe, "enable_model_cpu_offload"):
+                pipe.enable_model_cpu_offload(gpu_id=0)
+            elif torch.cuda.is_available():
+                pipe.to("cuda")
+
+            pipe.load_lora_weights(
+                lora_path.parent,
+                weight_name=lora_path.name,
+                adapter_name="tryon",
+                local_files_only=True,
+            )
+            if hasattr(pipe, "set_adapters"):
+                pipe.set_adapters(["tryon"], adapter_weights=[float(self.config.lora_scale)])
+
+            _LOCAL_PIPE_CACHE[cache_key] = pipe
+            return pipe
 
     def is_available(self) -> EngineAvailability:
         missing: list[str] = []
@@ -121,20 +281,21 @@ class KleinTryOnLoraEngine:
                 error_code = error_code or "DEPENDENCY_MISSING"
 
         if backend == "diffusers_local":
-            has_base = bool(
-                (self.config.model_path and self.config.model_path.exists())
-                or (
-                    self.config.checkpoint_dir
-                    and self.config.checkpoint_dir.exists()
-                    and any(self.config.checkpoint_dir.iterdir())
-                )
-            )
-            if not has_base:
-                missing.append("local FLUX.2 Klein base model path/checkpoint_dir is missing")
+            model_dir = self.local_model_dir
+            if not model_dir or not model_dir.exists():
+                missing.append(f"local FLUX.2 Klein base model directory not found: {model_dir}")
+                error_code = error_code or "MODEL_MISSING"
+            elif model_dir.is_dir() and not (model_dir / "model_index.json").exists():
+                missing.append(f"local FLUX.2 Klein model directory lacks model_index.json: {model_dir}")
                 error_code = error_code or "MODEL_MISSING"
             if not self.config.lora_path or not self.config.lora_path.exists():
                 missing.append(f"LoRA weights not found: {self.config.lora_path}")
                 error_code = error_code or "LORA_MISSING"
+            if error_code not in {"MODEL_MISSING", "LORA_MISSING"}:
+                import_error = self._local_worker_check_error()
+                if import_error:
+                    missing.append(f"diffusers_local dependencies unavailable: {import_error}")
+                    error_code = error_code or "DEPENDENCY_MISSING"
 
         if missing:
             return EngineAvailability(
@@ -355,11 +516,189 @@ class KleinTryOnLoraEngine:
         }
         return TryOnResult(image=image, metadata=metadata)
 
-    def _run_diffusers_local(self, output_dir: Path) -> TryOnResult:
-        raise ModelUnavailableError(
-            "Klein Try-On LoRA diffusers_local backend is prepared as an experimental interface, "
-            "but local FLUX.2 Klein loading is not enabled by default."
+    def _release_idm_resident_worker(self) -> None:
+        try:
+            from app.engines.idm_vton_engine import stop_resident_clients
+
+            stop_resident_clients()
+        except Exception:
+            pass
+
+    def _run_diffusers_local(
+        self,
+        prompt: str,
+        references: KleinReferences,
+        output_dir: Path,
+        seed: int | None,
+    ) -> TryOnResult:
+        if self.config.entrypoint:
+            return self._run_diffusers_local_subprocess(prompt, references, output_dir, seed)
+        return self._run_diffusers_local_in_process(prompt, references, output_dir, seed)
+
+    def _run_diffusers_local_subprocess(
+        self,
+        prompt: str,
+        references: KleinReferences,
+        output_dir: Path,
+        seed: int | None,
+    ) -> TryOnResult:
+        if not self.config.entrypoint:
+            raise ModelUnavailableError("Klein Try-On LoRA local worker entrypoint is not configured.")
+        if self.config.require_three_images and references.bottom_image is None:
+            raise ModelUnavailableError("Klein Try-On LoRA requires three image references for diffusers_local.")
+        self._release_idm_resident_worker()
+
+        width, height = self.output_size
+        image_paths = [references.person_path.as_posix(), references.top_path.as_posix()]
+        if references.bottom_path:
+            image_paths.append(references.bottom_path.as_posix())
+        request_payload = {
+            **self._request_payload(prompt, references),
+            "model_dir": str(self.local_model_dir),
+            "lora_path": str(self.config.lora_path),
+            "width": width,
+            "height": height,
+            "steps": self.steps,
+            "guidance_scale": self.config.guidance_scale,
+            "lora_scale": self.config.lora_scale,
+            "seed": seed,
+            "image_paths": image_paths,
+            "local_files_only": True,
+            "worker_python": self.local_worker_python,
+            "worker_entrypoint": str(self.config.entrypoint),
+        }
+        request_path = output_dir / "local_worker_request.json"
+        request_path.write_text(json.dumps(_sanitize_payload(request_payload), indent=2), encoding="utf-8")
+        self._save_json_aliases(output_dir, "local_generation", request_payload)
+
+        command = [
+            self.local_worker_python,
+            str(self.config.entrypoint),
+            "--request",
+            str(request_path),
+            "--output-dir",
+            str(output_dir),
+        ]
+        started = time.perf_counter()
+        completed = subprocess.run(
+            command,
+            cwd=self.config.entrypoint.parent,
+            capture_output=True,
+            text=True,
+            timeout=self.config.timeout_seconds,
+            check=False,
         )
+        runtime_seconds = time.perf_counter() - started
+        (output_dir / "local_worker_stdout.txt").write_text(completed.stdout[-8000:], encoding="utf-8")
+        (output_dir / "local_worker_stderr.txt").write_text(completed.stderr[-8000:], encoding="utf-8")
+        if completed.returncode != 0:
+            message = (completed.stderr.strip() or completed.stdout.strip() or "local Klein worker failed")[-2000:]
+            raise EngineExecutionError(f"local Klein worker failed rc={completed.returncode}: {message}")
+        worker_result_path = output_dir / "worker_result.json"
+        if worker_result_path.exists():
+            worker_payload = json.loads(worker_result_path.read_text(encoding="utf-8"))
+        else:
+            worker_payload = json.loads(completed.stdout)
+        result_path = Path(worker_payload.get("result_path", output_dir / "klein_lora_result.png"))
+        image = Image.open(result_path).convert("RGB")
+        save_image(image, output_dir / "result.png")
+        metadata = {
+            "engine": self.name,
+            "backend": "diffusers_local",
+            "runtime_seconds": round(runtime_seconds, 3),
+            "worker": worker_payload,
+            "model_dir": str(self.local_model_dir),
+            "lora_path": str(self.config.lora_path),
+            "lora_scale": self.config.lora_scale,
+            "steps": self.steps,
+            "guidance_scale": self.config.guidance_scale,
+            "width": width,
+            "height": height,
+            "seed": seed,
+            "bottom_source": references.bottom_source,
+            "warnings": references.warnings,
+        }
+        return TryOnResult(image=image, metadata=metadata)
+
+    def _run_diffusers_local_in_process(
+        self,
+        prompt: str,
+        references: KleinReferences,
+        output_dir: Path,
+        seed: int | None,
+    ) -> TryOnResult:
+        if self.config.require_three_images and references.bottom_image is None:
+            raise ModelUnavailableError("Klein Try-On LoRA requires three image references for diffusers_local.")
+
+        self._release_idm_resident_worker()
+
+        import torch
+
+        width, height = self.output_size
+        image_references = [
+            _fit_canvas(references.person_image, (width, height)),
+            _fit_canvas(references.top_image, (width, height)),
+        ]
+        if references.bottom_image is not None:
+            image_references.append(_fit_canvas(references.bottom_image, (width, height)))
+
+        self._save_json_aliases(
+            output_dir,
+            "local_generation",
+            {
+                **self._request_payload(prompt, references),
+                "model_dir": str(self.local_model_dir),
+                "lora_path": str(self.config.lora_path),
+                "width": width,
+                "height": height,
+                "seed": seed,
+                "local_files_only": True,
+            },
+        )
+
+        pipe = self._load_diffusers_local_pipe()
+        generator_device = "cuda" if torch.cuda.is_available() else "cpu"
+        generator = torch.Generator(device=generator_device).manual_seed(int(seed or 0))
+        started = time.perf_counter()
+        try:
+            output = pipe(
+                image=image_references,
+                prompt=prompt,
+                height=height,
+                width=width,
+                num_inference_steps=self.steps,
+                guidance_scale=float(self.config.guidance_scale),
+                generator=generator,
+            )
+        except TypeError:
+            output = pipe(
+                image=image_references,
+                prompt=prompt,
+                height=height,
+                width=width,
+                num_inference_steps=self.steps,
+                guidance_scale=float(self.config.guidance_scale),
+            )
+        runtime_seconds = time.perf_counter() - started
+        image = output.images[0].convert("RGB")
+        save_image(image, output_dir / "klein_lora_result.png")
+        save_image(image, output_dir / "result.png")
+        metadata = {
+            "engine": self.name,
+            "backend": "diffusers_local",
+            "runtime_seconds": round(runtime_seconds, 3),
+            "model_dir": str(self.local_model_dir),
+            "lora_path": str(self.config.lora_path),
+            "lora_scale": self.config.lora_scale,
+            "steps": self.steps,
+            "guidance_scale": self.config.guidance_scale,
+            "width": width,
+            "height": height,
+            "seed": seed,
+            "bottom_source": references.bottom_source,
+            "warnings": references.warnings,
+        }
+        return TryOnResult(image=image, metadata=metadata)
 
     def run(self, inputs: TryOnInputs) -> TryOnResult:
         output_dir = Path(inputs.output_dir or ".")
@@ -411,7 +750,7 @@ class KleinTryOnLoraEngine:
             if self.config.backend == "fal_api":
                 result = self._run_fal_api(prompt, references, output_dir)
             elif self.config.backend == "diffusers_local":
-                result = self._run_diffusers_local(output_dir)
+                result = self._run_diffusers_local(prompt, references, output_dir, inputs.seed)
             else:
                 raise ModelUnavailableError("Klein Try-On LoRA backend is disabled.")
         except Exception as exc:

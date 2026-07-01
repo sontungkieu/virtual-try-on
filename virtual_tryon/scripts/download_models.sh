@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p \
   "$ROOT_DIR/models/idm_vton" \
   "$ROOT_DIR/models/flux2" \
+  "$ROOT_DIR/models/flux2-klein-9b" \
   "$ROOT_DIR/models/catvton" \
   "$ROOT_DIR/models/loras" \
   "$ROOT_DIR/third_party"
@@ -15,6 +16,7 @@ Model directories are ready.
 Place checkpoints using this convention:
   models/idm_vton/                 IDM-VTON weights and config files
   models/flux2/                    Optional local FLUX.2 cache/checkpoints
+  models/flux2-klein-9b/           Local FLUX.2 Klein 9B diffusers snapshot
   models/catvton/                  CatVTON baseline weights
   models/loras/flux-klein-tryon.safetensors
 

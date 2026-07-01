@@ -26,3 +26,17 @@ def test_config_model_paths():
     assert settings.idm_vton.entrypoint.name == "inference.py"
     assert settings.idm_vton.repo_path is not None
     assert settings.idm_vton.repo_path.name == "IDM-VTON"
+
+
+def test_klein_local_env_overrides(monkeypatch, tmp_path):
+    model_dir = tmp_path / "klein"
+    lora_path = tmp_path / "lora.safetensors"
+    monkeypatch.setenv("TRYON_KLEIN_BACKEND", "diffusers_local")
+    monkeypatch.setenv("TRYON_KLEIN_MODEL_PATH", str(model_dir))
+    monkeypatch.setenv("TRYON_KLEIN_LORA_PATH", str(lora_path))
+
+    settings = load_settings()
+
+    assert settings.klein_tryon_lora.backend == "diffusers_local"
+    assert settings.klein_tryon_lora.model_path == model_dir
+    assert settings.klein_tryon_lora.lora_path == lora_path

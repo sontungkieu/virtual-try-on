@@ -81,8 +81,37 @@ def test_innerwear_masks_have_anatomy_specific_extents():
     assert underwear_bbox is not None
     assert bra_bbox[1] < int(image.height * 0.36)
     assert bra_bbox[3] < int(image.height * 0.50)
-    assert underwear_bbox[1] > int(image.height * 0.40)
-    assert underwear_bbox[3] < int(image.height * 0.75)
+    assert underwear_bbox[1] > int(image.height * 0.55)
+    assert underwear_bbox[3] < int(image.height * 0.90)
+
+
+def test_upper_body_mask_reaches_long_shirt_hem_on_foreground_body():
+    image = Image.new("RGB", (512, 768), (245, 245, 245))
+    body = Image.new("RGB", (300, 696), (70, 70, 80))
+    image.paste(body, (90, 36))
+
+    result = create_agnostic_mask(image, "upper_body", PreprocessingConfig())
+
+    bbox = result.raw_mask.getbbox()
+    assert bbox is not None
+    assert result.mask_source.startswith("foreground_body")
+    assert bbox[3] >= int(image.height * 0.68)
+
+
+def test_innerwear_rejects_edge_touching_foreground_bbox():
+    image = Image.new("RGB", (512, 768), (245, 245, 245))
+    edge_touching_foreground = Image.new("RGB", (388, 571), (70, 70, 80))
+    image.paste(edge_touching_foreground, (124, 125))
+
+    result = create_agnostic_mask(image, "women_underwear", PreprocessingConfig())
+
+    bbox = result.raw_mask.getbbox()
+    assert bbox is not None
+    assert result.body_bbox_xyxy is not None
+    assert result.body_bbox_xyxy[2] < int(image.width * 0.82)
+    assert any("touches horizontal image edge" in warning for warning in result.mask_warnings)
+    assert bbox[0] < int(image.width * 0.40)
+    assert bbox[2] < int(image.width * 0.75)
 
 
 def test_garment_segmenter_returns_normalized_crop():

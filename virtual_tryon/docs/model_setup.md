@@ -251,8 +251,9 @@ Klein Try-On LoRA is also benchmark-only by default:
 ```yaml
 klein_tryon_lora:
   enabled: false
-  backend: "fal_api"
+  backend: "diffusers_local"
   base_model: "black-forest-labs/FLUX.2-klein-9B"
+  model_path: "./models/flux2-klein-9b"
   lora_repo: "fal/flux-klein-9b-virtual-tryon-lora"
   lora_weight_api: "flux-klein-tryon.safetensors"
   fal_endpoint: "fal-ai/flux-2/klein/9b/base/edit/lora"
@@ -261,11 +262,53 @@ klein_tryon_lora:
 
 `enabled: false` keeps IDM-VTON as the production default. Selecting `klein_lora` in the benchmark, ablation script, or optional API `engine_mode` explicitly opts into the experimental adapter.
 
-For the fal.ai backend, set credentials only in the shell environment:
+The default backend is local Diffusers. It runs through
+`scripts/klein_diffusers_local_worker.py`, so keep the new Diffusers stack in a
+Klein-specific Python environment and point `TRYON_KLEIN_PYTHON` at it:
 
 ```bash
+/root/.local/bin/uv venv /workspace/venvs/project_phase2_klein --python 3.11
+/root/.local/bin/uv pip install --python /workspace/venvs/project_phase2_klein/bin/python \
+  "diffusers @ git+https://github.com/huggingface/diffusers.git" \
+  "transformers>=4.56" "accelerate>=1.0" "peft>=0.17" "safetensors>=0.4" pillow numpy
+export TRYON_KLEIN_PYTHON=/workspace/venvs/project_phase2_klein/bin/python
+$TRYON_KLEIN_PYTHON scripts/download_klein_local_models.py
+```
+
+`download_klein_local_models.py` downloads:
+
+- `black-forest-labs/FLUX.2-klein-9B` into `models/flux2-klein-9b`.
+- `fal/flux-klein-9b-virtual-tryon-lora/flux-klein-tryon.safetensors` into `models/loras/`.
+
+The 9B model is gated on Hugging Face. Accept the license on the model page and
+login with `huggingface-cli login`, or set `HF_TOKEN`/`HUGGINGFACE_HUB_TOKEN`
+only in the shell environment. Do not commit or print tokens.
+
+`idm` and `klein-local` are declared as conflicting extras because IDM-VTON pins
+older `diffusers`/`transformers`, while `Flux2KleinPipeline` requires the new
+Diffusers implementation. The worker split lets one backend process serve both
+UI modes without upgrading the IDM runtime environment.
+
+For the optional fal.ai backend, set credentials only in the shell environment
+and override the backend:
+
+```bash
+export TRYON_KLEIN_BACKEND="fal_api"
 export FAL_KEY="..."
 ```
+
+On RunPod, account Settings may only expose SSH keys. For a running pod, keep
+private credentials in a workspace file outside the Git repo:
+
+```bash
+umask 077
+mkdir -p /workspace/secrets
+printf 'FAL_KEY=%q\n' "$FAL_KEY" > /workspace/secrets/virtual_tryon.env
+```
+
+Then start or restart the API with `scripts/run_backend.sh`, which sources
+`/workspace/secrets/virtual_tryon.env` with auto-export enabled. You can point
+to another private file by setting `VIRTUAL_TRYON_ENV_FILE`.
 
 Do not write `FAL_KEY`, `HF_TOKEN`, or API keys into `.env`, docs, logs, outputs, or committed files. The adapter sanitizes request and response JSON before saving artifacts.
 
@@ -276,7 +319,5 @@ bottom_strategy: "crop_from_person"
 ```
 
 This crops the lower-body region from the person image, saves `auto_bottom_reference.png`, and records that the bottom reference was auto-cropped. `blank_placeholder` and `skip` are available for controlled experiments.
-
-Optional local Diffusers support is represented by `backend: "diffusers_local"`, but it is not a default runtime path. It requires a locally available FLUX.2 Klein base model and LoRA weights. The project does not auto-download gated base models unless the user explicitly chooses to do that setup.
 
 Benchmark logs include the final `TRYON ...` prompt. If credentials, dependencies, model access, or the execution backend are missing, the benchmark row is marked unavailable instead of crashing.

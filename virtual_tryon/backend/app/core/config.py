@@ -30,8 +30,8 @@ class PreprocessingConfig(BaseModel):
     preserve_face: bool = True
     preserve_hands: bool = True
     preserve_hair: bool = True
-    innerwear_dilation_px: int = 6
-    innerwear_blur_radius: int = 4
+    innerwear_dilation_px: int = 12
+    innerwear_blur_radius: int = 5
     innerwear_use_silhouette_clip: bool = True
     innerwear_silhouette_clip_dilation_px: int = 8
     mask_cache_enabled: bool = True
@@ -227,6 +227,22 @@ def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     resident_worker_optimization = os.getenv("TRYON_IDM_WORKER_OPTIMIZATION")
     if resident_worker_optimization:
         config.setdefault("idm_vton", {})["resident_worker_optimization"] = resident_worker_optimization
+
+    klein_backend = os.getenv("TRYON_KLEIN_BACKEND")
+    if klein_backend:
+        config.setdefault("klein_tryon_lora", {})["backend"] = klein_backend
+
+    klein_model_path = os.getenv("TRYON_KLEIN_MODEL_PATH")
+    if klein_model_path:
+        config.setdefault("klein_tryon_lora", {})["model_path"] = klein_model_path
+
+    klein_lora_path = os.getenv("TRYON_KLEIN_LORA_PATH")
+    if klein_lora_path:
+        config.setdefault("klein_tryon_lora", {})["lora_path"] = klein_lora_path
+
+    klein_entrypoint = os.getenv("TRYON_KLEIN_ENTRYPOINT")
+    if klein_entrypoint:
+        config.setdefault("klein_tryon_lora", {})["entrypoint"] = klein_entrypoint
 
     device = os.getenv("TRYON_DEVICE")
     if device:

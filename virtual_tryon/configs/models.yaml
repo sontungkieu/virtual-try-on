@@ -44,8 +44,10 @@ catvton:
 
 klein_tryon_lora:
   enabled: false
-  backend: "fal_api"
+  backend: "diffusers_local"
   base_model: "black-forest-labs/FLUX.2-klein-9B"
+  model_path: "./models/flux2-klein-9b"
+  entrypoint: "./scripts/klein_diffusers_local_worker.py"
   lora_repo: "fal/flux-klein-9b-virtual-tryon-lora"
   lora_weight_api: "flux-klein-tryon.safetensors"
   lora_weight_comfy: "flux-klein-tryon-comfy.safetensors"

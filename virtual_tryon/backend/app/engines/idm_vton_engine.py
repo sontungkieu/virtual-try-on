@@ -238,6 +238,10 @@ def _stop_resident_clients() -> None:
             client.stop()
 
 
+def stop_resident_clients() -> None:
+    _stop_resident_clients()
+
+
 def _get_resident_client(config: EngineConfig) -> IDMVTonResidentClient:
     global _RESIDENT_ATEXIT_REGISTERED
     key = _resident_client_key(config)

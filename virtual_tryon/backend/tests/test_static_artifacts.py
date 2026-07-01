@@ -42,3 +42,19 @@ def test_artifact_route_missing_file_returns_404(client, tmp_path):
     response = api.get("/artifacts/nope/result.png")
 
     assert response.status_code == 404
+
+
+def test_public_url_requires_existing_artifact(tmp_path):
+    from app.core.config import StorageConfig
+    from app.services.storage_service import StorageService
+
+    storage = StorageService(
+        StorageConfig(
+            inputs_dir=tmp_path / "inputs",
+            outputs_dir=tmp_path / "outputs",
+            temp_dir=tmp_path / "temp",
+            public_outputs_prefix="/artifacts",
+        )
+    )
+
+    assert storage.public_url(tmp_path / "outputs" / "job123" / "missing.png") is None

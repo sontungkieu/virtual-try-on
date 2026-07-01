@@ -27,7 +27,7 @@ def build_status() -> dict:
     settings = load_settings()
     klein_config = settings.klein_tryon_lora.model_copy(deep=True)
     klein_config.enabled = True
-    klein_config.backend = klein_config.backend or "fal_api"
+    klein_config.backend = "fal_api"
     engine = KleinTryOnLoraEngine(klein_config)
     availability = engine.is_available()
     fal_key_set = bool(os.getenv("FAL_KEY"))

@@ -45,6 +45,14 @@ Response:
 {
   "job_id": "abc",
   "status": "completed",
+  "current_stage": "completed",
+  "stages": [
+    {"key": "queued", "label": "Queued", "status": "completed", "runtime_seconds": 0.0},
+    {"key": "running", "label": "Running", "status": "completed", "runtime_seconds": 1.2},
+    {"key": "generating", "label": "Generating", "status": "completed", "runtime_seconds": 42.5},
+    {"key": "refining", "label": "Refining", "status": "skipped", "runtime_seconds": 0.0},
+    {"key": "completed", "label": "Completed", "status": "completed", "runtime_seconds": 0.1}
+  ],
   "result_url": "/artifacts/abc/result.png",
   "debug": {
     "mask_url": "/artifacts/abc/mask_preview.png",
@@ -69,6 +77,14 @@ When `run_mode=async`, `POST /tryon` returns quickly:
 {
   "job_id": "abc",
   "status": "queued",
+  "current_stage": "queued",
+  "stages": [
+    {"key": "queued", "label": "Queued", "status": "running"},
+    {"key": "running", "label": "Running", "status": "pending"},
+    {"key": "generating", "label": "Generating", "status": "pending"},
+    {"key": "refining", "label": "Refining", "status": "pending"},
+    {"key": "completed", "label": "Completed", "status": "pending"}
+  ],
   "result_url": null,
   "debug": {}
 }
@@ -102,7 +118,7 @@ Category upload mapping:
 
 Masks are built from a dynamic body estimate for the uploaded person image. The backend first tries foreground separation, then adaptive row/column background estimation and center-saliency estimation; only then does it fall back to a conservative body box. The adult innerwear categories use anatomy-shaped masks rather than broad outerwear rectangles. Underwear bottom masks target the pelvis/brief region with leg openings; `women_bra` targets cup, bridge, band, and strap regions. Repeated jobs with the same person image, category, resolution, and mask config reuse cached masks from `data/temp/mask_cache`. Mask source, cache hit/miss, bbox, area, and warnings are recorded in `mask_metadata.json`. These categories are intended for adult-only, non-sexual product try-on workflows.
 
-`engine_mode=klein_lora` is experimental. It opts into the Klein Try-On LoRA adapter for that request only, requires a top garment, and uses the configured bottom-reference strategy when no bottom garment is uploaded. If `FAL_KEY`, dependencies, or model access are missing, the job returns `status: failed` with `error_code: ENGINE_UNAVAILABLE` and no raw stack trace.
+`engine_mode=klein_lora` is experimental. It opts into the Klein Try-On LoRA adapter for that request only, requires a top garment, and uses the configured bottom-reference strategy when no bottom garment is uploaded. The default backend is local Diffusers and requires `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and the `klein-local` dependency set. The engine stops the resident IDM worker before loading Klein so VRAM is released at model switch time. If local model files, dependencies, or model access are missing, the job returns `status: failed` with `error_code: ENGINE_UNAVAILABLE` and no raw stack trace. `TRYON_KLEIN_BACKEND=fal_api` keeps the old fal.ai path and requires `FAL_KEY`.
 
 If `use_refiner=true` and the FLUX refiner is missing, incompatible, or runs out of memory, the job still returns `status: completed` with `result_url` pointing to the IDM-VTON core output. The output folder includes `flux_refiner_error.txt` and `quality_report.json` explaining the fallback. Raw stack traces are not returned in the API response. Repair runs only after a refined output is created and accepted by the quality gate.
 
@@ -162,11 +178,11 @@ Returns the stored job status. Job metadata is also written to:
 data/outputs/{job_id}/job.json
 ```
 
-`job.json` includes `queued`, `running`, `completed`, or `failed`, timestamps, clean error text, result URL, debug URLs, and engine status.
+`job.json` includes `queued`, `running`, `completed`, or `failed`, timestamps, clean error text, result URL, debug URLs, engine status, `current_stage`, and per-stage timings. Stages are `queued`, `running`, `generating`, `refining`, and `completed`; `refining` is marked `skipped` when refinement is disabled or unavailable.
 
 ## GET /tryon/history
 
-Returns recent jobs from `data/outputs` with input artifact URLs, result URL, category, engine, output resolution, step count, seed, timestamps, runtime, quality summary, and engine status.
+Returns recent jobs from `data/outputs` with input artifact URLs, result URL, category, engine, output resolution, step count, seed, timestamps, runtime, per-stage timings, quality summary, and engine status.
 
 ```text
 /tryon/history?limit=20

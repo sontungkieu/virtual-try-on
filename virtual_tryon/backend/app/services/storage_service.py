@@ -37,6 +37,8 @@ class StorageService:
         if path is None:
             return None
         path = Path(path)
+        if not path.exists():
+            return None
         try:
             relative = path.relative_to(self.outputs_dir)
         except ValueError:
