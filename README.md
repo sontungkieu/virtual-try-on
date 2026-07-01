@@ -125,6 +125,24 @@ The frontend and `/tryon` API can override output resolution, inference steps, s
 
 Try-on masks are anchored to a dynamic body estimate from the uploaded person image, then fall back to a conservative body box when foreground estimation is unreliable or touches a horizontal image edge. Upper-body masks extend lower to cover long shirt hems, reducing leftover source garment at the waist. Adult innerwear categories use a dedicated anatomy-shaped mask path rather than broad outerwear rectangles. `men_underwear` and `women_underwear` create a lower pelvis/brief-shaped mask with enough dilation to remove the old garment while staying inside the body silhouette. For Klein LoRA, underwear-bottom prompts explicitly describe adult brief underwear and use the person image as the upper-body preservation reference when no top garment is uploaded, so the bottom reference is not misread as black pants. `women_bra` creates a cup/band/strap-shaped mask. Each job writes `mask_metadata.json`, `mask_innerwear_shape.png`, and, when available, `mask_body_silhouette.png` for debugging. Repeated jobs with the same person image, category, resolution, and mask config reuse cached masks from `data/temp/mask_cache`; mask algorithm changes bump the cache version so old masks are not reused.
 
+### OmniTry API engine sweep
+
+Use `virtual_tryon/scripts/benchmark_omnitry_api.py` to run the live backend API across multiple engines on the OmniTry underwear cases. The script discovers `input_models/`, `female_undergarmentt/`, and `male_undergarment/`, schedules male and female cases, submits `/tryon` jobs, downloads artifacts, scores any available quality report, and writes resumable results under `data/outputs/omnitry_engine_sweep/`.
+
+```bash
+cd virtual_tryon
+uv run python scripts/benchmark_omnitry_api.py \
+  --dataset-root "/mnt/c/Users/Tung/Downloads/output_omnitry (1)/output_omnitry" \
+  --api-base http://127.0.0.1:8000 \
+  --flows idm_vton:10,idm_mask_expanded:10,klein_lora:4 \
+  --min-jobs 15 \
+  --max-jobs 15 \
+  --width 512 \
+  --height 768
+```
+
+The sweep resumes from `state.json`, updates `summary.csv` and `summary.json`, and regenerates `grid_latest.jpg` plus per-case sheets under `sheets/` after each job. It is meant for iterative engine/mask/prompt comparison: run a batch, inspect the sheets, patch the pipeline, commit, then resume until the configured no-improvement stop condition is reached.
+
 Single-item cases run as one pass. Multi-item cases are sequential:
 
 - sample 11: top then bottom

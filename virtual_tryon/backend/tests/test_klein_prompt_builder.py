@@ -62,6 +62,12 @@ def test_klein_prompt_innerwear_default_does_not_fall_back_to_pants():
     assert "black pants" not in prompt
 
 
+def test_klein_prompt_lower_body_default_uses_reference_garment():
+    prompt = build_klein_tryon_prompt(None, None, None, "lower_body")
+    assert "the reference lower garment shown in the reference image" in prompt
+    assert "black pants" not in prompt
+
+
 def test_klein_prompt_bra_targets_upper_innerwear_region():
     prompt = build_klein_tryon_prompt(
         "adult woman standing front-facing",

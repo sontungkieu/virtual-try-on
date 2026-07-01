@@ -4,7 +4,7 @@ from __future__ import annotations
 FULL_BODY_SENTENCE = "The final image is a full body shot."
 DEFAULT_PERSON_DESCRIPTION = "blonde woman standing front-facing"
 DEFAULT_TOP_DESCRIPTION = "the blue velvet wrap V-neck short-sleeve top shown in the reference image"
-DEFAULT_BOTTOM_DESCRIPTION = "black pants"
+DEFAULT_BOTTOM_DESCRIPTION = "the reference lower garment"
 DEFAULT_INNERWEAR_BOTTOM_DESCRIPTIONS = {
     "men_underwear": "adult men's brief underwear",
     "women_underwear": "adult women's brief underwear",
