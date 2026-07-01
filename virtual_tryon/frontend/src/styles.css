@@ -19,6 +19,12 @@ select {
   font: inherit;
 }
 
+input,
+textarea,
+select {
+  min-width: 0;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -128,6 +134,13 @@ figcaption,
   display: grid;
   cursor: pointer;
   overflow: hidden;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.upload-panel:hover,
+.upload-panel:focus-within {
+  border-color: #7fb1a4;
+  box-shadow: 0 8px 24px rgba(21, 52, 45, 0.08);
 }
 
 .upload-panel-person {
@@ -136,8 +149,10 @@ figcaption,
 }
 
 .upload-panel-garment {
+  height: 92px;
   min-height: 92px;
-  grid-template-rows: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) minmax(72px, 20%);
+  grid-template-rows: 1fr;
 }
 
 .upload-panel input {
@@ -157,7 +172,7 @@ figcaption,
 }
 
 .upload-panel-garment .upload-panel-meta {
-  align-self: center;
+  align-self: stretch;
 }
 
 .upload-icon {
@@ -184,6 +199,12 @@ figcaption,
   overflow-wrap: anywhere;
 }
 
+.upload-panel-garment .upload-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .upload-file {
   display: block;
   min-width: 0;
@@ -200,6 +221,11 @@ figcaption,
   place-items: center;
   border-top: 1px solid #edf1ef;
   background: #eef2f0;
+}
+
+.upload-panel-garment .upload-preview {
+  border-top: 0;
+  border-left: 1px solid #edf1ef;
 }
 
 .upload-preview img {
@@ -224,6 +250,7 @@ figcaption,
 .garment-section {
   display: grid;
   gap: 10px;
+  align-content: start;
 }
 
 .category-select {
@@ -261,7 +288,7 @@ figcaption,
 }
 
 .garment-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .control-row {
@@ -316,7 +343,7 @@ textarea {
   background: #fff;
   padding: 12px;
   display: grid;
-  grid-template-columns: 170px repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   align-items: end;
 }
@@ -353,7 +380,7 @@ textarea {
   background: #fff;
   padding: 12px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   align-items: end;
 }
@@ -378,8 +405,13 @@ textarea {
 
 .seed-control div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) 36px;
   gap: 6px;
+}
+
+.seed-control .icon-button {
+  width: 36px;
+  height: 36px;
 }
 
 .deterministic-toggle {
@@ -859,7 +891,7 @@ textarea {
   }
 
   .garment-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 }
 

@@ -6,6 +6,7 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { ResultViewer } from "./components/ResultViewer";
 import { UploadGarment } from "./components/UploadGarment";
 import { UploadPerson } from "./components/UploadPerson";
+import { useWorkbenchMotion } from "./hooks/useWorkbenchMotion";
 import { useTryOnStore } from "./store/tryonStore";
 import "./styles.css";
 
@@ -33,6 +34,7 @@ function generateButtonLabel(state: ReturnType<typeof useTryOnStore.getState>) {
 
 function App() {
   const state = useTryOnStore();
+  const workbenchRef = useWorkbenchMotion();
   const setField = state.setField;
   const resolutionValue = `${state.outputWidth}x${state.outputHeight}`;
   const isPresetResolution = resolutionPresets.some((item) => `${item.width}x${item.height}` === resolutionValue);
@@ -137,7 +139,7 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="workbench">
+      <section className="workbench" ref={workbenchRef}>
         <div className="toolbar">
           <div className="title-block">
             <h1>Virtual Try-On</h1>
