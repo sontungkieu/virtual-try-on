@@ -20,7 +20,7 @@ from app.preprocessing.densepose import DensePoseEstimator
 from app.preprocessing.garment_segmenter import GarmentSegmenter
 from app.preprocessing.human_parser import HumanParser
 from app.preprocessing.image_loader import fit_to_canvas
-from app.preprocessing.mask_utils import mask_area
+from app.preprocessing.mask_utils import composite_masked, mask_area
 from app.preprocessing.refine_mask import build_refine_masks, select_refine_mask
 from app.prompts.prompt_builder import build_prompt
 from app.prompts.prompt_types import EngineMode, PromptBuildResult, PromptVariant
@@ -570,8 +570,10 @@ class TryOnPipeline:
             raise
         self._emit_progress(request, "generating", "completed")
 
-        core_path = save_image(core.image, job_dir / "core_output.png")
-        core_image = core.image
+        raw_core_image = core.image.convert("RGB")
+        raw_core_path = save_image(raw_core_image, job_dir / "core_output_raw.png")
+        core_image = composite_masked(person, raw_core_image, mask_result.soft_mask)
+        core_path = save_image(core_image, job_dir / "core_output.png")
         current_image = core_image
 
         refine_masks = build_refine_masks(person, mask_result.soft_mask, settings.refinement)
@@ -717,7 +719,11 @@ class TryOnPipeline:
             "quality_report": quality_report,
             "refiner_status": refiner_status,
             "engine_status": engine_status,
-            "core_metadata": core.metadata,
+            "core_metadata": {
+                **core.metadata,
+                "masked_composite": True,
+                "raw_core_output": str(raw_core_path),
+            },
         }
         self.storage.save_json(request.job_id, "metadata.json", metadata)
         write_artifact_manifest(

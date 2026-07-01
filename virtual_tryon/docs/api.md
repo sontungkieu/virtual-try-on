@@ -16,7 +16,7 @@ Returns service status, detected device, and model availability.
 }
 ```
 
-Model status strings may include detailed skip reasons. When the resident IDM-VTON worker is enabled, the `idm_vton` status also includes `resident_worker=not_started`, `running pid=...`, or an exited return code. IDM-VTON is the default core API engine; CatVTON and Klein LoRA are benchmark baselines unless explicitly configured.
+Model status strings may include detailed skip reasons. When the resident IDM-VTON worker is enabled, the `idm_vton` status also includes `resident_worker=not_started`, `running pid=...`, or an exited return code. Disabled optional engines return a lightweight disabled status instead of running local worker dependency checks. IDM-VTON is the default core API engine; CatVTON and Klein LoRA are benchmark baselines unless explicitly configured.
 
 ## POST /tryon
 
@@ -127,6 +127,13 @@ The web API is not a ComfyUI queue path. It runs the configured Python
 engines/workers directly; packaged ComfyUI workflows are separate demo/batch
 artifacts.
 
+Core model output is mask-composited before it becomes the final image. The
+backend saves `core_output_raw.png` for inspection, then pastes only the
+soft-mask region from that raw model image onto the original person image and
+writes the constrained result to `core_output.png` and `result.png`. This is
+especially important for global engines such as Klein LoRA, which do not accept
+a hard inpaint mask internally.
+
 `engine_mode=klein_lora` is experimental. It opts into the Klein Try-On LoRA adapter for that request only, requires a top garment, and uses the configured bottom-reference strategy when no bottom garment is uploaded. The default backend is local Diffusers and requires `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and the `klein-local` dependency set. The engine stops the resident IDM worker before loading Klein so VRAM is released at model switch time. If local model files, dependencies, or model access are missing, the job returns `status: failed` with `error_code: ENGINE_UNAVAILABLE` and no raw stack trace. Local placement is controlled by `TRYON_KLEIN_DEVICE_MAP`; default `cpu_offload` is safest, while `cuda` attempts to place the full pipe on GPU. On 24 GB GPUs, use `TRYON_KLEIN_DEVICE_MAP=cuda` with `TRYON_KLEIN_QUANTIZATION=bnb_4bit` and `TRYON_KLEIN_QUANTIZE_COMPONENTS=transformer,text_encoder` for the tested all-GPU mode. Optional Klein TensorRT uses `TRYON_KLEIN_TRT_PROFILE=vae_decode` and records TensorRT metadata in artifacts; transformer/full TensorRT profiles are debug-only and reject bnb-quantized transformer weights. `TRYON_KLEIN_BACKEND=fal_api` keeps the old fal.ai path and requires `FAL_KEY`.
 
 If `use_refiner=true` and the FLUX refiner is missing, incompatible, or runs out of memory, the job still returns `status: completed` with `result_url` pointing to the IDM-VTON core output. The output folder includes `flux_refiner_error.txt` and `quality_report.json` explaining the fallback. Raw stack traces are not returned in the API response. Repair runs only after a refined output is created and accepted by the quality gate.
@@ -134,6 +141,7 @@ If `use_refiner=true` and the FLUX refiner is missing, incompatible, or runs out
 Important output files:
 
 ```text
+core_output_raw.png
 core_output.png
 result.png
 quality_report.json

@@ -131,6 +131,32 @@ def test_klein_lora_availability_missing_token(monkeypatch):
     assert "FAL_KEY" in availability.status
 
 
+def test_klein_lora_disabled_does_not_run_local_worker_check(monkeypatch, tmp_path):
+    def fail_check(self):
+        raise AssertionError("disabled Klein should not run the local worker runtime check")
+
+    monkeypatch.setattr(KleinTryOnLoraEngine, "_local_worker_check_error", fail_check)
+    model_dir = tmp_path / "flux2-klein-9b"
+    model_dir.mkdir()
+    (model_dir / "model_index.json").write_text("{}", encoding="utf-8")
+    lora_path = tmp_path / "flux-klein-tryon.safetensors"
+    lora_path.write_bytes(b"fake")
+
+    engine = KleinTryOnLoraEngine(
+        _config(
+            enabled=False,
+            backend="diffusers_local",
+            model_path=model_dir,
+            lora_path=lora_path,
+        )
+    )
+
+    availability = engine.is_available()
+    assert not availability
+    assert availability.error_code == "DISABLED"
+    assert "enabled is false" in availability.status
+
+
 def test_klein_lora_local_availability_uses_model_paths(monkeypatch, tmp_path):
     monkeypatch.setattr(KleinTryOnLoraEngine, "_diffusers_local_import_error", staticmethod(lambda: None))
     model_dir = tmp_path / "flux2-klein-9b"

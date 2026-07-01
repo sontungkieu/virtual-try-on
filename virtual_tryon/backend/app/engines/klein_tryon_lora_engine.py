@@ -319,12 +319,24 @@ class KleinTryOnLoraEngine:
         if not self.config.enabled:
             missing.append("klein_tryon_lora.enabled is false")
             error_code = "DISABLED"
+            return EngineAvailability(
+                available=False,
+                status="unavailable: " + "; ".join(missing),
+                missing=missing,
+                error_code=error_code,
+            )
         if backend not in SUPPORTED_BACKENDS:
             missing.append(f"unsupported backend: {backend}")
             error_code = error_code or "INVALID_BACKEND"
         if backend == "disabled":
             missing.append("klein_tryon_lora.backend is disabled")
             error_code = error_code or "DISABLED"
+            return EngineAvailability(
+                available=False,
+                status="unavailable: " + "; ".join(missing),
+                missing=missing,
+                error_code=error_code,
+            )
         if not self.config.base_model:
             missing.append("base_model is not configured")
             error_code = error_code or "CONFIG_MISSING"

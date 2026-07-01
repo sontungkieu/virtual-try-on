@@ -71,6 +71,17 @@ def overlay_mask_preview(image: Image.Image, mask: Image.Image, color: tuple[int
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")
 
 
+def composite_masked(base: Image.Image, generated: Image.Image, mask: Image.Image) -> Image.Image:
+    base_rgb = base.convert("RGB")
+    generated_rgb = generated.convert("RGB")
+    if generated_rgb.size != base_rgb.size:
+        generated_rgb = generated_rgb.resize(base_rgb.size, Image.Resampling.LANCZOS)
+    mask_l = to_l_mask(mask)
+    if mask_l.size != base_rgb.size:
+        mask_l = mask_l.resize(base_rgb.size, Image.Resampling.LANCZOS)
+    return Image.composite(generated_rgb, base_rgb, mask_l)
+
+
 @dataclass(frozen=True)
 class MaskBundle:
     raw_mask: Image.Image

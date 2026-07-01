@@ -5,7 +5,9 @@ import json
 import pytest
 from PIL import Image
 
+import app.services.tryon_pipeline as pipeline_module
 from app.core.config import load_settings
+from app.engines.base import TryOnResult
 from app.schemas.tryon import TryOnResponse
 from app.services.storage_service import StorageService
 from app.services.job_service import JobService
@@ -117,6 +119,38 @@ def test_debug_paths_are_created(tmp_path):
     assert (job_dir / "agnostic.png").exists()
     assert (job_dir / "core_output.png").exists()
     assert response.debug.core_output_url
+
+
+class GlobalChangingEngine:
+    name = "klein_tryon_lora"
+
+    def run(self, inputs):
+        return TryOnResult(Image.new("RGB", inputs.person_image.size, (250, 20, 20)), {"engine": self.name})
+
+
+def test_pipeline_masks_global_engine_output(monkeypatch, tmp_path):
+    settings = configure_temp_storage(load_settings(), tmp_path)
+    settings.pipeline.engine = "klein_tryon_lora"
+    settings.refinement.enabled = False
+    settings.repair.enabled = False
+    storage = StorageService(settings.storage)
+    monkeypatch.setattr(pipeline_module, "create_tryon_engine", lambda _settings: GlobalChangingEngine())
+
+    request = make_request("masked_global_output")
+    request.use_refiner = False
+    request.repair_mode = False
+    response = TryOnPipeline(settings, storage).run(request)
+
+    job_dir = settings.storage.outputs_dir / "masked_global_output"
+    person = Image.open(job_dir / "person.png").convert("RGB")
+    raw = Image.open(job_dir / "core_output_raw.png").convert("RGB")
+    core = Image.open(job_dir / "core_output.png").convert("RGB")
+    result = Image.open(job_dir / "result.png").convert("RGB")
+
+    assert response.status == "completed"
+    assert raw.getpixel((0, 0)) == (250, 20, 20)
+    assert core.getpixel((0, 0)) == person.getpixel((0, 0))
+    assert result.getpixel((0, 0)) == person.getpixel((0, 0))
 
 
 def test_pipeline_applies_resolution_and_step_overrides(tmp_path):

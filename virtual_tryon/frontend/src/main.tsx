@@ -4,7 +4,6 @@ import { Loader2, Play, Shuffle, X } from "lucide-react";
 import { cancelTryOnJob, getTryOnJob, submitTryOn, TryOnApiError } from "./lib/api";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { ResultViewer } from "./components/ResultViewer";
-import { TryOnPreview } from "./components/TryOnPreview";
 import { UploadGarment } from "./components/UploadGarment";
 import { UploadPerson } from "./components/UploadPerson";
 import { useTryOnStore } from "./store/tryonStore";
@@ -37,13 +36,6 @@ function App() {
   const setField = state.setField;
   const resolutionValue = `${state.outputWidth}x${state.outputHeight}`;
   const isPresetResolution = resolutionPresets.some((item) => `${item.width}x${item.height}` === resolutionValue);
-  const topPreviewTitle = state.category === "women_bra" ? "Bra" : "Top";
-  const bottomPreviewTitle =
-    state.category === "men_underwear"
-      ? "Men underwear"
-      : state.category === "women_underwear"
-        ? "Women underwear"
-        : "Bottom";
 
   function setResolution(value: string) {
     const preset = resolutionPresets.find((item) => `${item.width}x${item.height}` === value);
@@ -55,6 +47,16 @@ function App() {
   function randomizeSeed() {
     setField("seed", Math.floor(Math.random() * 2_147_483_647));
     setField("seedMode", "fixed");
+  }
+
+  function setEngineMode(value: typeof state.engineMode) {
+    setField("engineMode", value);
+    if (value !== "klein_lora") return;
+    if (state.steps >= 28) setField("steps", 4);
+    if (state.outputWidth === 768 && state.outputHeight === 1024) {
+      setField("outputWidth", 512);
+      setField("outputHeight", 768);
+    }
   }
 
   function displayError(error: unknown) {
@@ -131,25 +133,29 @@ function App() {
     state.loading && state.jobId && (state.result?.status === "queued" || state.result?.status === "running")
   );
   const generateLabel = generateButtonLabel(state);
+  const toolbarStatus = state.loading ? generateLabel : "Ready";
 
   return (
     <main className="app-shell">
       <section className="workbench">
         <div className="toolbar">
-          <div>
+          <div className="title-block">
             <h1>Virtual Try-On</h1>
-            <span>{state.jobId ?? "Ready"}</span>
+            <span>{toolbarStatus}</span>
+            {state.error && <div className="error-box toolbar-error">{state.error}</div>}
           </div>
-          <button className="primary-button" type="button" onClick={generate} disabled={state.loading}>
-            {state.loading ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
-            {generateLabel}
-          </button>
-          {canCancel && (
-            <button className="secondary-button" type="button" onClick={cancelJob}>
-              <X size={18} />
-              Cancel
+          <div className="toolbar-actions">
+            <button className="primary-button" type="button" onClick={generate} disabled={state.loading}>
+              {state.loading ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
+              {generateLabel}
             </button>
-          )}
+            {canCancel && (
+              <button className="secondary-button" type="button" onClick={cancelJob}>
+                <X size={18} />
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="input-grid">
@@ -196,7 +202,7 @@ function App() {
           </label>
           <label>
             <span>Engine</span>
-            <select value={state.engineMode} onChange={(e) => setField("engineMode", e.target.value as typeof state.engineMode)}>
+            <select value={state.engineMode} onChange={(e) => setEngineMode(e.target.value as typeof state.engineMode)}>
               <option value="">IDM-VTON default</option>
               <option value="idm_vton">IDM-VTON</option>
               <option value="idm_mask_expanded">IDM-VTON expanded mask</option>
@@ -287,14 +293,6 @@ function App() {
           </label>
         </section>
 
-        {state.error && <div className="error-box">{state.error}</div>}
-
-        <div className="preview-grid">
-          <TryOnPreview title="Person" file={state.personImage} />
-          <TryOnPreview title={topPreviewTitle} file={state.topImage} />
-          <TryOnPreview title={bottomPreviewTitle} file={state.bottomImage} />
-          <TryOnPreview title="Dress" file={state.dressImage} />
-        </div>
       </section>
 
       <aside className="right-rail">
