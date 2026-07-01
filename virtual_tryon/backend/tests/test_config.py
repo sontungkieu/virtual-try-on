@@ -34,9 +34,15 @@ def test_klein_local_env_overrides(monkeypatch, tmp_path):
     monkeypatch.setenv("TRYON_KLEIN_BACKEND", "diffusers_local")
     monkeypatch.setenv("TRYON_KLEIN_MODEL_PATH", str(model_dir))
     monkeypatch.setenv("TRYON_KLEIN_LORA_PATH", str(lora_path))
+    monkeypatch.setenv("TRYON_KLEIN_DEVICE_MAP", "cuda")
+    monkeypatch.setenv("TRYON_KLEIN_QUANTIZATION", "torchao_int8")
+    monkeypatch.setenv("TRYON_KLEIN_QUANTIZE_COMPONENTS", "transformer,text_encoder")
 
     settings = load_settings()
 
     assert settings.klein_tryon_lora.backend == "diffusers_local"
     assert settings.klein_tryon_lora.model_path == model_dir
     assert settings.klein_tryon_lora.lora_path == lora_path
+    assert settings.klein_tryon_lora.device_map == "cuda"
+    assert settings.klein_tryon_lora.quantization == "torchao_int8"
+    assert settings.klein_tryon_lora.quantize_components == ["transformer", "text_encoder"]

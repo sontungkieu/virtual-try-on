@@ -98,6 +98,9 @@ class EngineConfig(BaseModel):
     lora_path: Path | None = None
     fal_endpoint: str | None = None
     quantized: bool = False
+    quantization: str = "none"
+    quantize_components: list[str] = Field(default_factory=lambda: ["transformer", "text_encoder"])
+    device_map: str = "cpu_offload"
     remote_text_encoder: bool = False
     max_retries: int = 1
     api_url_env: str | None = None
@@ -243,6 +246,22 @@ def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     klein_entrypoint = os.getenv("TRYON_KLEIN_ENTRYPOINT")
     if klein_entrypoint:
         config.setdefault("klein_tryon_lora", {})["entrypoint"] = klein_entrypoint
+
+    klein_device_map = os.getenv("TRYON_KLEIN_DEVICE_MAP")
+    if klein_device_map:
+        config.setdefault("klein_tryon_lora", {})["device_map"] = klein_device_map
+
+    klein_quantization = os.getenv("TRYON_KLEIN_QUANTIZATION")
+    if klein_quantization:
+        config.setdefault("klein_tryon_lora", {})["quantization"] = klein_quantization
+
+    klein_quantize_components = os.getenv("TRYON_KLEIN_QUANTIZE_COMPONENTS")
+    if klein_quantize_components:
+        config.setdefault("klein_tryon_lora", {})["quantize_components"] = [
+            item.strip()
+            for item in klein_quantize_components.split(",")
+            if item.strip()
+        ]
 
     device = os.getenv("TRYON_DEVICE")
     if device:

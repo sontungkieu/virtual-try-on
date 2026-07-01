@@ -9,7 +9,7 @@ This repository contains a ComfyUI-based virtual try-on experiment suite for 15 
 
 The project is designed to run model inference locally on a GPU machine such as RunPod. It does not require calling a hosted image API for the final pipelines.
 
-Python dependencies are managed from `virtual_tryon/pyproject.toml` with `uv`; `virtual_tryon/uv.lock` is the reproducible lockfile. Use `uv add` for new Python dependencies. Real IDM-VTON runtime packages are in the optional `idm` extra, local FLUX.2 Klein packages are in the optional `klein-local` extra, and TensorRT runtime packages are in the optional `tensorrt` extra. `idm` and `klein-local` are declared as conflicting extras because they need different Diffusers/Transformers generations.
+Python dependencies are managed from `virtual_tryon/pyproject.toml` with `uv`; `virtual_tryon/uv.lock` is the reproducible lockfile. Use `uv add` for new Python dependencies. Real IDM-VTON runtime packages are in the optional `idm` extra, local FLUX.2 Klein packages are in the optional `klein-local` extra, and TensorRT runtime packages are in the optional `tensorrt` extra. `klein-local` includes `bitsandbytes` and `torchao` so local Klein can optionally quantize transformer/text-encoder components. `idm` and `klein-local` are declared as conflicting extras because they need different Diffusers/Transformers generations.
 
 ## Current Status
 

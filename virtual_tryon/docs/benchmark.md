@@ -221,7 +221,7 @@ uv run python scripts/run_klein_lora_ablation.py \
   --output data/outputs/klein_lora_ablation_test
 ```
 
-Without the local Klein base model, LoRA file, or `klein-local` dependencies, the script still creates `summary.csv`, `summary.json`, `comparison_grid.png`, `comparison_index.html`, and `manual_ratings_klein_lora.csv`; Klein rows are marked unavailable and include sanitized status artifacts. With `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and a Diffusers build that exports `Flux2KleinPipeline`, the same command attempts the local endpoint.
+Without the local Klein base model, LoRA file, or `klein-local` dependencies, the script still creates `summary.csv`, `summary.json`, `comparison_grid.png`, `comparison_index.html`, and `manual_ratings_klein_lora.csv`; Klein rows are marked unavailable and include sanitized status artifacts. With `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and a Diffusers build that exports `Flux2KleinPipeline`, the same command attempts the local endpoint. Record `TRYON_KLEIN_DEVICE_MAP` and `TRYON_KLEIN_QUANTIZATION` with timing results because `cpu_offload`, full `cuda`, and quantized `cuda` have different VRAM and runtime behavior.
 
 Before a local run, download/validate assets:
 
@@ -229,8 +229,12 @@ Before a local run, download/validate assets:
 /root/.local/bin/uv venv /workspace/venvs/project_phase2_klein --python 3.11
 /root/.local/bin/uv pip install --python /workspace/venvs/project_phase2_klein/bin/python \
   "diffusers @ git+https://github.com/huggingface/diffusers.git" \
-  "transformers>=4.56" "accelerate>=1.0" "peft>=0.17" "safetensors>=0.4" pillow numpy
+  "transformers>=4.56" "accelerate>=1.0" "peft>=0.17" "safetensors>=0.4" \
+  "bitsandbytes>=0.49.2" "torchao>=0.17.0" pillow numpy
 export TRYON_KLEIN_PYTHON=/workspace/venvs/project_phase2_klein/bin/python
+export TRYON_KLEIN_DEVICE_MAP=cuda
+export TRYON_KLEIN_QUANTIZATION=bnb_4bit
+export TRYON_KLEIN_QUANTIZE_COMPONENTS=transformer,text_encoder
 $TRYON_KLEIN_PYTHON scripts/download_klein_local_models.py
 ```
 

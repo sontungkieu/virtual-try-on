@@ -35,7 +35,7 @@ Do not write API keys into tracked files or logs.
 - Missing core checkpoints return a clear failed job message.
 - Mock engine is available for tests and pipeline validation via `TRYON_ENGINE=mock`.
 - FLUX refiner and ADetailer-like repair are post-processing modules only.
-- Klein LoRA defaults to `diffusers_local`; it runs through `scripts/klein_diffusers_local_worker.py` and should use `TRYON_KLEIN_PYTHON` pointing to a Klein-specific venv with the `klein-local` dependency stack. It also requires the local `models/flux2-klein-9b` snapshot and `models/loras/flux-klein-tryon.safetensors`. The old fal.ai path is available with `TRYON_KLEIN_BACKEND=fal_api` and `FAL_KEY`.
+- Klein LoRA defaults to `diffusers_local`; it runs through `scripts/klein_diffusers_local_worker.py` and should use `TRYON_KLEIN_PYTHON` pointing to a Klein-specific venv with the `klein-local` dependency stack. It also requires the local `models/flux2-klein-9b` snapshot and `models/loras/flux-klein-tryon.safetensors`. The default placement is `TRYON_KLEIN_DEVICE_MAP=cpu_offload`. For the tested all-GPU path on a 24 GB GPU, use `TRYON_KLEIN_DEVICE_MAP=cuda`, `TRYON_KLEIN_QUANTIZATION=bnb_4bit`, and `TRYON_KLEIN_QUANTIZE_COMPONENTS=transformer,text_encoder`. The old fal.ai path is available with `TRYON_KLEIN_BACKEND=fal_api` and `FAL_KEY`.
 - Local Klein stops the resident IDM worker before loading so GPU memory is released during model switching.
 - Every job writes intermediates to `data/outputs/{job_id}/`.
 - `/tryon/history` lists retained job folders with inputs, config, output, runtime, status, and per-stage timings.

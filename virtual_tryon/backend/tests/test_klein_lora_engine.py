@@ -195,6 +195,9 @@ def test_klein_lora_local_run_uses_diffusers_pipeline(monkeypatch, tmp_path):
             default_width=128,
             default_height=192,
             num_inference_steps=4,
+            device_map="cuda",
+            quantization="torchao_int8",
+            quantize_components=["transformer"],
         )
     )
     result = engine.run(_inputs(tmp_path))
@@ -211,6 +214,38 @@ def test_klein_lora_local_run_uses_diffusers_pipeline(monkeypatch, tmp_path):
     assert local_payload["backend"] == "diffusers_local"
     assert local_payload["local_files_only"] is True
     assert local_payload["lora_path"] == str(lora_path)
+    assert local_payload["device_map"] == "cuda"
+    assert local_payload["quantization"] == "torchao_int8"
+    assert local_payload["quantize_components"] == ["transformer"]
+
+
+def test_klein_lora_cache_key_includes_placement_and_quantization(tmp_path):
+    model_dir = tmp_path / "flux2-klein-9b"
+    model_dir.mkdir()
+    lora_path = tmp_path / "flux-klein-tryon.safetensors"
+    lora_path.write_bytes(b"fake")
+
+    base = KleinTryOnLoraEngine(
+        _config(
+            backend="diffusers_local",
+            model_path=model_dir,
+            lora_path=lora_path,
+            device_map="cpu_offload",
+            quantization="none",
+        )
+    )
+    quantized = KleinTryOnLoraEngine(
+        _config(
+            backend="diffusers_local",
+            model_path=model_dir,
+            lora_path=lora_path,
+            device_map="cuda",
+            quantization="torchao_int8",
+            quantize_components=["transformer"],
+        )
+    )
+
+    assert base._local_cache_key() != quantized._local_cache_key()
 
 
 def test_klein_lora_bottom_crop_from_person(monkeypatch, tmp_path):

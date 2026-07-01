@@ -38,9 +38,11 @@ idm = [
 ]
 klein-local = [
     "accelerate>=1.0",
+    "bitsandbytes>=0.49.2",
     "diffusers",
     "peft>=0.17",
     "safetensors>=0.4",
+    "torchao>=0.17.0",
     "transformers>=4.56",
 ]
 

@@ -152,6 +152,9 @@ class KleinTryOnLoraEngine:
             {
                 "model_dir": str(self.local_model_dir),
                 "lora_path": str(self.config.lora_path),
+                "device_map": self.config.device_map,
+                "quantization": self.config.quantization,
+                "quantize_components": list(self.config.quantize_components),
             },
             sort_keys=True,
         )
@@ -215,23 +218,49 @@ class KleinTryOnLoraEngine:
                 torch.set_float32_matmul_precision("high")
 
             try:
+                quantization_config = None
+                if self.config.quantization != "none":
+                    from scripts.klein_diffusers_local_worker import (
+                        build_quantization_config,
+                        normalize_components,
+                        normalize_quantization,
+                    )
+
+                    quantization_config = build_quantization_config(
+                        normalize_quantization(self.config.quantization),
+                        normalize_components(self.config.quantize_components),
+                    )
+                from_pretrained_kwargs = {
+                    "torch_dtype": torch.bfloat16,
+                    "local_files_only": True,
+                    "low_cpu_mem_usage": True,
+                }
+                if quantization_config is not None:
+                    from_pretrained_kwargs["quantization_config"] = quantization_config
+                if self.config.device_map in {"balanced", "auto"}:
+                    from_pretrained_kwargs["device_map"] = self.config.device_map
                 pipe = Flux2KleinPipeline.from_pretrained(
                     model_dir,
-                    torch_dtype=torch.bfloat16,
-                    local_files_only=True,
-                    low_cpu_mem_usage=True,
+                    **from_pretrained_kwargs,
                 )
             except TypeError:
+                from_pretrained_kwargs.pop("low_cpu_mem_usage", None)
                 pipe = Flux2KleinPipeline.from_pretrained(
                     model_dir,
-                    torch_dtype=torch.bfloat16,
-                    local_files_only=True,
+                    **from_pretrained_kwargs,
                 )
             if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
                 pipe.vae.enable_tiling()
-            if torch.cuda.is_available() and hasattr(pipe, "enable_model_cpu_offload"):
+            device_map = self.config.device_map.replace("-", "_")
+            if device_map in {"offload", "model_cpu_offload"}:
+                device_map = "cpu_offload"
+            elif device_map in {"gpu", "all_gpu", "all_cuda", "full_cuda"}:
+                device_map = "cuda"
+            if device_map == "cpu_offload" and torch.cuda.is_available() and hasattr(pipe, "enable_model_cpu_offload"):
                 pipe.enable_model_cpu_offload(gpu_id=0)
-            elif torch.cuda.is_available():
+            elif device_map == "sequential_cpu_offload" and torch.cuda.is_available() and hasattr(pipe, "enable_sequential_cpu_offload"):
+                pipe.enable_sequential_cpu_offload(gpu_id=0)
+            elif device_map == "cuda" and torch.cuda.is_available():
                 pipe.to("cuda")
 
             pipe.load_lora_weights(
@@ -432,6 +461,9 @@ class KleinTryOnLoraEngine:
             "resolution": self.config.resolution,
             "require_three_images": self.config.require_three_images,
             "bottom_source": references.bottom_source,
+            "device_map": self.config.device_map,
+            "quantization": self.config.quantization,
+            "quantize_components": list(self.config.quantize_components),
         }
 
     @staticmethod
@@ -563,6 +595,9 @@ class KleinTryOnLoraEngine:
             "lora_scale": self.config.lora_scale,
             "seed": seed,
             "image_paths": image_paths,
+            "device_map": self.config.device_map,
+            "quantization": self.config.quantization,
+            "quantize_components": list(self.config.quantize_components),
             "local_files_only": True,
             "worker_python": self.local_worker_python,
             "worker_entrypoint": str(self.config.entrypoint),
@@ -612,6 +647,9 @@ class KleinTryOnLoraEngine:
             "lora_scale": self.config.lora_scale,
             "steps": self.steps,
             "guidance_scale": self.config.guidance_scale,
+            "device_map": self.config.device_map,
+            "quantization": self.config.quantization,
+            "quantize_components": list(self.config.quantize_components),
             "width": width,
             "height": height,
             "seed": seed,
@@ -652,6 +690,9 @@ class KleinTryOnLoraEngine:
                 "width": width,
                 "height": height,
                 "seed": seed,
+                "device_map": self.config.device_map,
+                "quantization": self.config.quantization,
+                "quantize_components": list(self.config.quantize_components),
                 "local_files_only": True,
             },
         )
@@ -692,6 +733,9 @@ class KleinTryOnLoraEngine:
             "lora_scale": self.config.lora_scale,
             "steps": self.steps,
             "guidance_scale": self.config.guidance_scale,
+            "device_map": self.config.device_map,
+            "quantization": self.config.quantization,
+            "quantize_components": list(self.config.quantize_components),
             "width": width,
             "height": height,
             "seed": seed,

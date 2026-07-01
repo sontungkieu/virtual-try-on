@@ -119,6 +119,17 @@ class JobService:
     def _engine(self) -> str:
         return self.pipeline.settings.pipeline.engine
 
+    def _engine_for_request(self, request: PipelineRequest | None = None) -> str:
+        if request is None or not request.engine_mode:
+            return self._engine
+        if request.engine_mode in {"idm_vton", "idm_mask_expanded", "idm_vton_flux", "idm_mask_expanded_flux"}:
+            return "mock" if self._engine == "mock" else "idm_vton"
+        if request.engine_mode == "klein_lora":
+            return "klein_tryon_lora"
+        if request.engine_mode == "catvton":
+            return "catvton"
+        return self._engine
+
     def _job_json_path(self, job_id: str):
         return self.storage.outputs_dir / job_id / "job.json"
 
@@ -136,6 +147,7 @@ class JobService:
         stage: str,
         status: str,
         *,
+        engine: str | None = None,
         runtime_seconds: float | None = None,
         error_code: str | None = None,
     ) -> None:
@@ -144,7 +156,7 @@ class JobService:
             json.dumps(
                 {
                     "job_id": job_id,
-                    "engine": self._engine,
+                    "engine": engine or self._engine,
                     "stage": stage,
                     "runtime_seconds": runtime_seconds,
                     "status": status,
@@ -162,7 +174,7 @@ class JobService:
             metrics.set_queue_size(self._queue_size())
         return job
 
-    def _mark_stage(self, job_id: str, key: str, status: StageStatus) -> None:
+    def _mark_stage(self, job_id: str, key: str, status: StageStatus, *, engine: str | None = None) -> None:
         job = self.get_job(job_id)
         if job is None:
             return
@@ -173,6 +185,7 @@ class JobService:
             job_id,
             key,
             status,
+            engine=engine,
             runtime_seconds=stage.runtime_seconds if stage else None,
         )
 
@@ -200,7 +213,14 @@ class JobService:
                 pass
         return job
 
-    def _finalize(self, job: TryOnStatusResponse, runtime_seconds: float) -> TryOnStatusResponse:
+    def _finalize(
+        self,
+        job: TryOnStatusResponse,
+        runtime_seconds: float,
+        *,
+        engine: str | None = None,
+    ) -> TryOnStatusResponse:
+        engine_name = engine or self._engine
         current = self.get_job(job.job_id)
         if current is not None:
             job.stages = current.stages
@@ -238,15 +258,16 @@ class JobService:
         self._save_job(job)
         if job.job_id not in self._metrics_finalized_jobs:
             self._metrics_finalized_jobs.add(job.job_id)
-            metrics.record_job(job.status, self._engine)
+            metrics.record_job(job.status, engine_name)
             metrics.observe_runtime(runtime_seconds)
             metrics.add_artifact_bytes(sum(int(item["size_bytes"]) for item in manifest["files"]))
             if job.error_code:
-                metrics.record_failure(self._engine, job.error_code)
+                metrics.record_failure(engine_name, job.error_code)
         self._log_event(
             job.job_id,
             "finalize",
             job.status,
+            engine=engine_name,
             runtime_seconds=runtime_seconds,
             error_code=job.error_code,
         )
@@ -270,6 +291,7 @@ class JobService:
         started_at: str,
     ) -> TryOnStatusResponse:
         max_retries = max(0, self.pipeline.settings.api.max_retries)
+        engine_name = self._engine_for_request(request)
         started = time.monotonic()
         last_error: Exception | None = None
 
@@ -291,9 +313,15 @@ class JobService:
                         retry_count=attempt,
                     ),
                     time.monotonic() - started,
+                    engine=engine_name,
                 )
             try:
-                request.progress_callback = lambda stage, status: self._mark_stage(request.job_id, stage, status)
+                request.progress_callback = lambda stage, status: self._mark_stage(
+                    request.job_id,
+                    stage,
+                    status,
+                    engine=engine_name,
+                )
                 response = self.pipeline.run(request)
                 runtime = time.monotonic() - started
                 current = self.get_job(request.job_id)
@@ -313,6 +341,7 @@ class JobService:
                             retry_count=attempt,
                         ),
                         runtime,
+                        engine=engine_name,
                     )
                 if runtime > self.pipeline.settings.api.max_job_runtime_seconds:
                     finished = self._now()
@@ -332,6 +361,7 @@ class JobService:
                             retry_count=attempt,
                         ),
                         runtime,
+                        engine=engine_name,
                     )
                 now = self._now()
                 payload = response.model_dump()
@@ -345,6 +375,7 @@ class JobService:
                         retry_count=attempt,
                     ),
                     runtime,
+                    engine=engine_name,
                 )
             except (TryOnError, InputValidationError) as exc:
                 last_error = exc
@@ -352,6 +383,7 @@ class JobService:
                     request.job_id,
                     f"attempt_{attempt + 1}",
                     "retrying" if attempt < max_retries else "failed",
+                    engine=engine_name,
                     runtime_seconds=time.monotonic() - started,
                     error_code=self._error_code(exc),
                 )
@@ -383,6 +415,7 @@ class JobService:
                 retry_count=max_retries,
             ),
             runtime,
+            engine=engine_name,
         )
 
     def _acquire_slot(self) -> None:
@@ -403,7 +436,7 @@ class JobService:
         self._apply_stage(running, "queued", "completed", when=now)
         self._apply_stage(running, "running", "running", when=now)
         self._save_job(running)
-        self._log_event(request.job_id, "pipeline", "running")
+        self._log_event(request.job_id, "pipeline", "running", engine=self._engine_for_request(request))
         try:
             return self._run_attempts(request, created_at=now, started_at=now)
         finally:
@@ -416,7 +449,7 @@ class JobService:
         now = self._now()
         queued = TryOnStatusResponse(job_id=request.job_id, status="queued", created_at=now, updated_at=now)
         self._apply_stage(queued, "queued", "running", when=now)
-        self._log_event(request.job_id, "queue", "queued")
+        self._log_event(request.job_id, "queue", "queued", engine=self._engine_for_request(request))
         return self._save_job(queued)
 
     def run_queued_job(self, request: PipelineRequest) -> None:
@@ -439,7 +472,7 @@ class JobService:
             self._apply_stage(job, "queued", "completed", when=job.started_at)
             self._apply_stage(job, "running", "running", when=job.started_at)
             self._save_job(job)
-            self._log_event(request.job_id, "pipeline", "running")
+            self._log_event(request.job_id, "pipeline", "running", engine=self._engine_for_request(request))
             self._run_attempts(
                 request,
                 created_at=job.created_at or job.started_at,

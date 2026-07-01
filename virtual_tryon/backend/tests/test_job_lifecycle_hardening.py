@@ -63,3 +63,18 @@ def test_job_timeout_is_marked_cleanly(tmp_path):
     assert completed.error_code == "TIMEOUT"
     assert "runtime limit" in (completed.error or "")
     assert completed.artifact_manifest is not None
+
+
+def test_job_event_engine_uses_request_override(tmp_path):
+    service = _service(tmp_path)
+    request = _request("klein")
+    request.engine_mode = "klein_lora"
+    assert service._engine_for_request(request) == "klein_tryon_lora"
+
+    request.engine_mode = "catvton"
+    assert service._engine_for_request(request) == "catvton"
+
+    request.engine_mode = "idm_vton"
+    assert service._engine_for_request(request) == "mock"
+    service.pipeline.settings.pipeline.engine = "idm_vton"
+    assert service._engine_for_request(request) == "idm_vton"

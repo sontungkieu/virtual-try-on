@@ -258,6 +258,9 @@ klein_tryon_lora:
   lora_weight_api: "flux-klein-tryon.safetensors"
   fal_endpoint: "fal-ai/flux-2/klein/9b/base/edit/lora"
   lora_path: "./models/loras/flux-klein-tryon.safetensors"
+  device_map: "cpu_offload"
+  quantization: "none"
+  quantize_components: ["transformer", "text_encoder"]
 ```
 
 `enabled: false` keeps IDM-VTON as the production default. Selecting `klein_lora` in the benchmark, ablation script, or optional API `engine_mode` explicitly opts into the experimental adapter.
@@ -270,10 +273,38 @@ Klein-specific Python environment and point `TRYON_KLEIN_PYTHON` at it:
 /root/.local/bin/uv venv /workspace/venvs/project_phase2_klein --python 3.11
 /root/.local/bin/uv pip install --python /workspace/venvs/project_phase2_klein/bin/python \
   "diffusers @ git+https://github.com/huggingface/diffusers.git" \
-  "transformers>=4.56" "accelerate>=1.0" "peft>=0.17" "safetensors>=0.4" pillow numpy
+  "transformers>=4.56" "accelerate>=1.0" "peft>=0.17" "safetensors>=0.4" \
+  "bitsandbytes>=0.49.2" "torchao>=0.17.0" pillow numpy
 export TRYON_KLEIN_PYTHON=/workspace/venvs/project_phase2_klein/bin/python
 $TRYON_KLEIN_PYTHON scripts/download_klein_local_models.py
 ```
+
+Local Klein placement is controlled independently from IDM-VTON:
+
+```bash
+# Safe default: stream modules through GPU with CPU offload.
+export TRYON_KLEIN_DEVICE_MAP=cpu_offload
+export TRYON_KLEIN_QUANTIZATION=none
+
+# Experimental all-GPU path. This can OOM on 24 GB without quantization.
+export TRYON_KLEIN_DEVICE_MAP=cuda
+
+# Tested all-GPU attempt on an RTX 3090 Ti 24 GB.
+export TRYON_KLEIN_DEVICE_MAP=cuda
+export TRYON_KLEIN_QUANTIZATION=bnb_4bit
+export TRYON_KLEIN_QUANTIZE_COMPONENTS=transformer,text_encoder
+```
+
+Supported local placement values are `cpu_offload`, `sequential_cpu_offload`,
+`cuda`, `balanced`, and `auto`. Supported quantization values are `none`,
+`torchao_int8`, `torchao_int4`, `torchao_fp8`, `bnb_4bit`, and `bnb_8bit`.
+`torchao_*` requires the `torchao` package; `bnb_*` requires `bitsandbytes`.
+On the current RTX 3090 Ti pod, unquantized `cuda` OOMs and `torchao_int8`
+still OOMs when only the transformer can be quantized; `bnb_4bit` over
+`transformer,text_encoder` completed a 512x768 4-step smoke run with about
+12.0 GB peak CUDA allocation.
+The worker writes `device_map`, `quantization`, quantized components, and CUDA
+peak allocation/reservation into `worker_result.json`.
 
 `download_klein_local_models.py` downloads:
 
