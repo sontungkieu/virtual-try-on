@@ -755,6 +755,7 @@ def _run_one(
     }
     start = time.monotonic()
     try:
+        submit_timeout = args.submit_timeout if args.submit_timeout is not None else args.job_timeout + 30.0
         submit_payload = _submit_job(
             args.api_base,
             case,
@@ -764,20 +765,28 @@ def _run_one(
             height=args.height,
             auto_prompt=args.auto_prompt,
             prompt_variant=args.prompt_variant,
-            timeout=args.request_timeout,
+            timeout=submit_timeout,
         )
         job_id = str(submit_payload.get("job_id") or submit_payload.get("id") or "")
         if not job_id:
             raise RuntimeError(f"Submit did not return a job id: {submit_payload}")
         row["job_id"] = job_id
-        print(f"submitted {case.case_id} {flow.label} r{round_index} job={job_id} seed={seed}", flush=True)
-        job_payload = _poll_job(
-            args.api_base,
-            job_id,
-            poll_interval=args.poll_interval,
-            job_timeout=args.job_timeout,
-            request_timeout=args.request_timeout,
+        submit_status = str(submit_payload.get("status", "")).lower()
+        print(
+            f"submitted {case.case_id} {flow.label} r{round_index} "
+            f"job={job_id} seed={seed} status={submit_status or 'unknown'}",
+            flush=True,
         )
+        if submit_status in TERMINAL_STATUSES:
+            job_payload = submit_payload
+        else:
+            job_payload = _poll_job(
+                args.api_base,
+                job_id,
+                poll_interval=args.poll_interval,
+                job_timeout=args.job_timeout,
+                request_timeout=args.request_timeout,
+            )
         row["status"] = str(job_payload.get("status") or "unknown").lower()
         row["runtime_seconds"] = round(time.monotonic() - start, 3)
         _write_json(job_dir / "job_status.json", job_payload)
@@ -838,6 +847,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--poll-interval", default=3.0, type=float)
     parser.add_argument("--job-timeout", default=900.0, type=float)
     parser.add_argument("--request-timeout", default=60.0, type=float)
+    parser.add_argument("--submit-timeout", default=None, type=float)
     parser.add_argument("--no-resume", action="store_true", help="Ignore existing state.json.")
     parser.add_argument("--dry-run", action="store_true", help="Print the next schedule without submitting jobs.")
     return parser.parse_args()
