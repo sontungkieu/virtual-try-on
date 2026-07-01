@@ -449,11 +449,14 @@ class KleinTryOnLoraEngine:
     def _prepare_references(self, inputs: TryOnInputs, output_dir: Path) -> KleinReferences:
         warnings: list[str] = []
         person = inputs.person_image.convert("RGB")
-        top_image = (
-            inputs.extra.get("garment_top_image")
-            or inputs.extra.get("top_image")
-            or inputs.garment_image
-        ).convert("RGB")
+        explicit_top = inputs.extra.get("garment_top_image") or inputs.extra.get("top_image")
+        if explicit_top is not None:
+            top_image = explicit_top.convert("RGB")
+        elif inputs.category in {"men_underwear", "women_underwear"}:
+            top_image = person.copy()
+            warnings.append("top reference copied from person image for underwear-bottom preservation")
+        else:
+            top_image = inputs.garment_image.convert("RGB")
         bottom_image = inputs.extra.get("garment_bottom_image") or inputs.extra.get("bottom_image")
 
         person_path = save_image(person, output_dir / "person_reference.png")

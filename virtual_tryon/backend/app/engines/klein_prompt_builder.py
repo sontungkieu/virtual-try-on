@@ -5,6 +5,11 @@ FULL_BODY_SENTENCE = "The final image is a full body shot."
 DEFAULT_PERSON_DESCRIPTION = "blonde woman standing front-facing"
 DEFAULT_TOP_DESCRIPTION = "the blue velvet wrap V-neck short-sleeve top shown in the reference image"
 DEFAULT_BOTTOM_DESCRIPTION = "black pants"
+DEFAULT_INNERWEAR_BOTTOM_DESCRIPTIONS = {
+    "men_underwear": "adult men's brief underwear",
+    "women_underwear": "adult women's brief underwear",
+}
+DEFAULT_BRA_DESCRIPTION = "adult bra or upper innerwear garment"
 
 
 def _clean(value: str | None) -> str | None:
@@ -49,8 +54,13 @@ def build_klein_tryon_prompt(
         return _normalize_user_prompt(extra_instruction)
 
     person = _clean(person_description) or DEFAULT_PERSON_DESCRIPTION
-    top = _clean(top_description) or DEFAULT_TOP_DESCRIPTION
-    bottom = _clean(bottom_description) or DEFAULT_BOTTOM_DESCRIPTION
+    top = _clean(top_description) or (
+        DEFAULT_BRA_DESCRIPTION if category == "women_bra" else DEFAULT_TOP_DESCRIPTION
+    )
+    bottom = _clean(bottom_description) or DEFAULT_INNERWEAR_BOTTOM_DESCRIPTIONS.get(
+        category,
+        DEFAULT_BOTTOM_DESCRIPTION,
+    )
 
     if category == "full_outfit":
         body = (
