@@ -282,8 +282,12 @@ def _encode_multipart(fields: dict[str, Any], files: dict[str, Path]) -> tuple[b
 
 
 def _json_request(url: str, timeout: float) -> dict[str, Any]:
-    with urlopen(url, timeout=timeout) as response:
-        payload = response.read()
+    try:
+        with urlopen(url, timeout=timeout) as response:
+            payload = response.read()
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code}: {body[:1000]}") from exc
     return json.loads(payload.decode("utf-8"))
 
 
@@ -294,6 +298,8 @@ def _submit_job(
     seed: int,
     width: int,
     height: int,
+    auto_prompt: bool,
+    prompt_variant: str,
     timeout: float,
 ) -> dict[str, Any]:
     fields = {
@@ -306,8 +312,8 @@ def _submit_job(
         "output_width": width,
         "output_height": height,
         "steps": flow.steps,
-        "auto_prompt": "true",
-        "prompt_variant": "production",
+        "auto_prompt": str(auto_prompt).lower(),
+        "prompt_variant": prompt_variant,
     }
     files = {
         "person_image": case.person_path,
@@ -320,8 +326,12 @@ def _submit_job(
         headers={"Content-Type": content_type, "Accept": "application/json"},
         method="POST",
     )
-    with urlopen(request, timeout=timeout) as response:
-        payload = response.read()
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = response.read()
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code}: {body[:1000]}") from exc
     return json.loads(payload.decode("utf-8"))
 
 
@@ -744,6 +754,8 @@ def _run_one(
             seed=seed,
             width=args.width,
             height=args.height,
+            auto_prompt=args.auto_prompt,
+            prompt_variant=args.prompt_variant,
             timeout=args.request_timeout,
         )
         job_id = str(submit_payload.get("job_id") or submit_payload.get("id") or "")
@@ -812,6 +824,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", default=768, type=int)
     parser.add_argument("--seed", default=30012005, type=int)
     parser.add_argument("--seed-stride", default=97, type=int)
+    parser.add_argument("--prompt-variant", default="default")
+    parser.add_argument("--auto-prompt", action="store_true")
     parser.add_argument("--improvement-epsilon", default=0.01, type=float)
     parser.add_argument("--poll-interval", default=3.0, type=float)
     parser.add_argument("--job-timeout", default=900.0, type=float)
