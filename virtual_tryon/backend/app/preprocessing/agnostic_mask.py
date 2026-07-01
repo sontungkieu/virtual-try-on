@@ -336,15 +336,15 @@ def _draw_underwear_mask(
     draw = ImageDraw.Draw(mask)
 
     if category == "men_underwear":
-        waist_y = int(by0 + bh * 0.58)
-        hip_y = int(by0 + bh * 0.68)
-        hem_y = int(by0 + bh * 0.82)
-        x0 = int(bx0 + bw * 0.18)
-        x1 = int(bx0 + bw * 0.82)
-        hip_x0 = int(bx0 + bw * 0.12)
-        hip_x1 = int(bx0 + bw * 0.88)
-        crotch_x0 = int(bx0 + bw * 0.40)
-        crotch_x1 = int(bx0 + bw * 0.60)
+        waist_y = int(by0 + bh * 0.55)
+        hip_y = int(by0 + bh * 0.70)
+        hem_y = int(by0 + bh * 0.89)
+        x0 = int(bx0 + bw * 0.14)
+        x1 = int(bx0 + bw * 0.86)
+        hip_x0 = int(bx0 + bw * 0.08)
+        hip_x1 = int(bx0 + bw * 0.92)
+        crotch_x0 = int(bx0 + bw * 0.43)
+        crotch_x1 = int(bx0 + bw * 0.57)
         draw.polygon(
             [
                 (x0, waist_y),
@@ -382,9 +382,9 @@ def _draw_underwear_mask(
 
     holes = Image.new("L", size, 0)
     hole_draw = ImageDraw.Draw(holes)
-    leg_rx = int(bw * (0.16 if category == "men_underwear" else 0.13))
-    leg_ry = int(bh * (0.08 if category == "men_underwear" else 0.10))
-    leg_y = int(by0 + bh * (0.80 if category == "men_underwear" else 0.82))
+    leg_rx = int(bw * (0.10 if category == "men_underwear" else 0.13))
+    leg_ry = int(bh * (0.05 if category == "men_underwear" else 0.10))
+    leg_y = int(by0 + bh * (0.90 if category == "men_underwear" else 0.82))
     hole_draw.ellipse(
         (int(bx0 + bw * 0.30) - leg_rx, leg_y - leg_ry, int(bx0 + bw * 0.30) + leg_rx, leg_y + leg_ry),
         fill=255,
