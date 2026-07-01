@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-mock-tests:
+    name: Backend mock tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: virtual_tryon
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: virtual_tryon/backend/requirements.txt
+
+      - name: Install backend requirements
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Run mock test suite
+        env:
+          PYTHONPATH: .
+          TRYON_ENGINE: mock
+        run: python -m pytest
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: virtual_tryon/frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: virtual_tryon/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build

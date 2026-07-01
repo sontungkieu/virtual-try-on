@@ -1,0 +1,53 @@
+quality:
+  min_output_width: 256
+  min_output_height: 256
+  background_change_threshold: 0.18
+  garment_change_threshold: 0.04
+  artifact_threshold: 0.35
+
+api:
+  run_mode: "sync"
+  job_poll_interval_seconds: 2
+  max_job_runtime_seconds: 900
+  max_retries: 0
+  max_concurrent_jobs: 1
+  queue_policy: "queue"
+  cors_origins:
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"
+  max_upload_mb: 20
+  allowed_image_mime_types:
+    - "image/jpeg"
+    - "image/png"
+    - "image/webp"
+  allow_public_artifacts: true
+  artifact_ttl_hours: 24
+
+refinement:
+  enabled: true
+  mask_mode: "safe"
+  boundary_dilation_px: 18
+  boundary_erosion_px: 6
+  soft_blur_radius: 8
+  refine_only_masked_region: true
+  preserve_face: true
+  preserve_hands: true
+  preserve_hair: true
+  preserve_background: true
+  default_prompt: "Refine only the clothing region. Preserve the person's face, hair, hands, pose, body shape, and background. Improve garment boundaries, fabric realism, folds, lighting, shadows, and texture fidelity to the reference garment."
+
+mask_experiments:
+  upper_body_expand_hem:
+    enabled: false
+    torso_down_extension_ratio: 0.12
+    waist_extra_dilation_px: 24
+    preserve_face: true
+    preserve_hair: true
+    preserve_hands: true
+    save_debug_overlays: true
+
+repair_regions:
+  - collar
+  - sleeve
+  - hand_overlap
+  - hemline

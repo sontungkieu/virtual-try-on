@@ -1,0 +1,315 @@
+{
+  "last_node_id": 17,
+  "last_link_id": 20,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "pos": [40, 120],
+      "size": [315, 314],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [1, 3, 10], "slot_index": 0},
+        {"name": "MASK", "type": "MASK", "links": null, "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "LoadImage"},
+      "widgets_values": ["sample_015_person.png", "image"]
+    },
+    {
+      "id": 2,
+      "type": "LoadImage",
+      "pos": [40, 540],
+      "size": [315, 314],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [2], "slot_index": 0},
+        {"name": "MASK", "type": "MASK", "links": null, "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "LoadImage"},
+      "widgets_values": ["sample_015_dress.png", "image"]
+    },
+    {
+      "id": 3,
+      "type": "VTONPhase2KleinFitCanvas",
+      "pos": [430, 120],
+      "size": [330, 120],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [{"name": "image", "type": "IMAGE", "link": 1}],
+      "outputs": [{"name": "canvas_image", "type": "IMAGE", "links": [6], "slot_index": 0}],
+      "properties": {"Node name for S&R": "VTONPhase2KleinFitCanvas"},
+      "widgets_values": [768, 1024]
+    },
+    {
+      "id": 4,
+      "type": "VTONPhase2KleinFitCanvas",
+      "pos": [430, 540],
+      "size": [330, 120],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [{"name": "image", "type": "IMAGE", "link": 2}],
+      "outputs": [{"name": "canvas_image", "type": "IMAGE", "links": [7], "slot_index": 0}],
+      "properties": {"Node name for S&R": "VTONPhase2KleinFitCanvas"},
+      "widgets_values": [768, 1024]
+    },
+    {
+      "id": 5,
+      "type": "VTONPhase2KleinBottomCrop",
+      "pos": [430, 780],
+      "size": [360, 210],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [{"name": "person_image", "type": "IMAGE", "link": 3}],
+      "outputs": [
+        {"name": "bottom_reference", "type": "IMAGE", "links": [8], "slot_index": 0},
+        {"name": "crop_box_json", "type": "STRING", "links": null, "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "VTONPhase2KleinBottomCrop"},
+      "widgets_values": [0.08, 0.5, 0.92, 0.98]
+    },
+    {
+      "id": 6,
+      "type": "VTONPhase2KleinPromptBuilder",
+      "pos": [860, 610],
+      "size": [420, 210],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [{"name": "prompt", "type": "STRING", "links": [9], "slot_index": 0}],
+      "properties": {"Node name for S&R": "VTONPhase2KleinPromptBuilder"},
+      "widgets_values": ["dress", "strong", "the reference garment"]
+    },
+    {
+      "id": 7,
+      "type": "VTONPhase2KleinLoadBaseModel",
+      "pos": [860, 100],
+      "size": [460, 100],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {"name": "klein_pipeline", "type": "VTON_KLEIN_PIPE", "links": [4], "slot_index": 0},
+        {"name": "status", "type": "STRING", "links": null, "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "VTONPhase2KleinLoadBaseModel"},
+      "widgets_values": ["/workspace/Project_Phase2/virtual_tryon/models/flux2-klein-9b"]
+    },
+    {
+      "id": 8,
+      "type": "VTONPhase2KleinLoadTryOnLoRA",
+      "pos": [860, 270],
+      "size": [520, 160],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [{"name": "klein_pipeline", "type": "VTON_KLEIN_PIPE", "link": 4}],
+      "outputs": [
+        {"name": "klein_pipeline_with_lora", "type": "VTON_KLEIN_PIPE", "links": [5], "slot_index": 0},
+        {"name": "status", "type": "STRING", "links": null, "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "VTONPhase2KleinLoadTryOnLoRA"},
+      "widgets_values": [
+        "/workspace/hf-cache/hub/models--fal--flux-klein-9b-virtual-tryon-lora/snapshots/8b078b15c6d958ce48892b9ef31b66aa7587d792/flux-klein-tryon.safetensors",
+        1.0
+      ]
+    },
+    {
+      "id": 9,
+      "type": "VTONPhase2SCHPSAMMask",
+      "pos": [430, 300],
+      "size": [430, 360],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [{"name": "person_image", "type": "IMAGE", "link": 10}],
+      "outputs": [
+        {"name": "processed_mask", "type": "MASK", "links": [12], "slot_index": 0},
+        {"name": "raw_mask", "type": "MASK", "links": null, "slot_index": 1},
+        {"name": "mask_overlay", "type": "IMAGE", "links": [11], "slot_index": 2},
+        {"name": "status", "type": "STRING", "links": null, "slot_index": 3}
+      ],
+      "properties": {"Node name for S&R": "VTONPhase2SCHPSAMMask"},
+      "widgets_values": ["dress", 2, 0, 2, true, 8, 14, "target_extent_if_empty_or_small"]
+    },
+    {
+      "id": 10,
+      "type": "VTONPhase2KleinSamplerDetailed",
+      "pos": [1440, 270],
+      "size": [520, 360],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {"name": "klein_pipeline", "type": "VTON_KLEIN_PIPE", "link": 5},
+        {"name": "person_canvas", "type": "IMAGE", "link": 6},
+        {"name": "top_reference", "type": "IMAGE", "link": 7},
+        {"name": "bottom_reference", "type": "IMAGE", "link": 8},
+        {"name": "prompt", "type": "STRING", "link": 9}
+      ],
+      "outputs": [
+        {"name": "image", "type": "IMAGE", "links": [13, 17], "slot_index": 0},
+        {"name": "status", "type": "STRING", "links": null, "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "VTONPhase2KleinSamplerDetailed"},
+      "widgets_values": [94215, 28, 2.5, 768, 1024]
+    },
+    {
+      "id": 11,
+      "type": "VTONPhase2MaskComposite",
+      "pos": [2030, 270],
+      "size": [470, 260],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {"name": "person_image", "type": "IMAGE", "link": 11},
+        {"name": "candidate_image", "type": "IMAGE", "link": 13},
+        {"name": "mask", "type": "MASK", "link": 12}
+      ],
+      "outputs": [
+        {"name": "composite_image", "type": "IMAGE", "links": [14], "slot_index": 0},
+        {"name": "mask_overlay", "type": "IMAGE", "links": [16], "slot_index": 1},
+        {"name": "soft_mask", "type": "MASK", "links": [15], "slot_index": 2},
+        {"name": "status", "type": "STRING", "links": null, "slot_index": 3}
+      ],
+      "properties": {"Node name for S&R": "VTONPhase2MaskComposite"},
+      "widgets_values": ["resize_exact", 4, 6, 0.42]
+    },
+    {
+      "id": 12,
+      "type": "VTONPhase2LocalSeamRepair",
+      "pos": [2580, 270],
+      "size": [480, 300],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {"name": "image", "type": "IMAGE", "link": 14},
+        {"name": "mask", "type": "MASK", "link": 15}
+      ],
+      "outputs": [
+        {"name": "repaired_image", "type": "IMAGE", "links": [18, 19], "slot_index": 0},
+        {"name": "edge_mask", "type": "MASK", "links": null, "slot_index": 1},
+        {"name": "edge_overlay", "type": "IMAGE", "links": [20], "slot_index": 2},
+        {"name": "status", "type": "STRING", "links": null, "slot_index": 3}
+      ],
+      "properties": {"Node name for S&R": "VTONPhase2LocalSeamRepair"},
+      "widgets_values": [8, 3, 6, 1.12, 1.03, 0.55]
+    },
+    {
+      "id": 13,
+      "type": "PreviewImage",
+      "pos": [3140, 80],
+      "size": [330, 330],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 17}],
+      "outputs": [],
+      "properties": {"Node name for S&R": "PreviewImage"},
+      "widgets_values": []
+    },
+    {
+      "id": 14,
+      "type": "PreviewImage",
+      "pos": [3140, 440],
+      "size": [330, 330],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 18}],
+      "outputs": [],
+      "properties": {"Node name for S&R": "PreviewImage"},
+      "widgets_values": []
+    },
+    {
+      "id": 15,
+      "type": "SaveImage",
+      "pos": [3140, 810],
+      "size": [360, 120],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 19}],
+      "outputs": [],
+      "properties": {"Node name for S&R": "SaveImage"},
+      "widgets_values": ["klein_local_mask_composite/flux2_klein9b_lora_strong_refined"]
+    },
+    {
+      "id": 16,
+      "type": "PreviewImage",
+      "pos": [2030, 570],
+      "size": [360, 320],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 16}],
+      "outputs": [],
+      "properties": {"Node name for S&R": "PreviewImage"},
+      "widgets_values": []
+    },
+    {
+      "id": 17,
+      "type": "PreviewImage",
+      "pos": [2580, 610],
+      "size": [360, 320],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 20}],
+      "outputs": [],
+      "properties": {"Node name for S&R": "PreviewImage"},
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [1, 1, 0, 3, 0, "IMAGE"],
+    [2, 2, 0, 4, 0, "IMAGE"],
+    [3, 1, 0, 5, 0, "IMAGE"],
+    [4, 7, 0, 8, 0, "VTON_KLEIN_PIPE"],
+    [5, 8, 0, 10, 0, "VTON_KLEIN_PIPE"],
+    [6, 3, 0, 10, 1, "IMAGE"],
+    [7, 4, 0, 10, 2, "IMAGE"],
+    [8, 5, 0, 10, 3, "IMAGE"],
+    [9, 6, 0, 10, 4, "STRING"],
+    [10, 1, 0, 9, 0, "IMAGE"],
+    [11, 1, 0, 11, 0, "IMAGE"],
+    [12, 9, 0, 11, 2, "MASK"],
+    [13, 10, 0, 11, 1, "IMAGE"],
+    [14, 11, 0, 12, 0, "IMAGE"],
+    [15, 11, 2, 12, 1, "MASK"],
+    [16, 11, 1, 16, 0, "IMAGE"],
+    [17, 10, 0, 13, 0, "IMAGE"],
+    [18, 12, 0, 14, 0, "IMAGE"],
+    [19, 12, 0, 15, 0, "IMAGE"],
+    [20, 12, 2, 17, 0, "IMAGE"]
+  ],
+  "groups": [
+    {"title": "PERSON BRANCH", "bounding": [20, 60, 780, 260], "color": "#355C7D", "font_size": 24},
+    {"title": "GARMENT / REFERENCE BRANCH", "bounding": [20, 480, 780, 540], "color": "#6C5B7B", "font_size": 24},
+    {"title": "MASK BRANCH - SCHP/SAM", "bounding": [400, 260, 500, 430], "color": "#2A9D8F", "font_size": 24},
+    {"title": "MODEL BRANCH - FLUX.2 KLEIN 9B + TRY-ON LORA", "bounding": [830, 40, 570, 440], "color": "#F67280", "font_size": 24},
+    {"title": "PROMPT BRANCH - STRONG", "bounding": [830, 560, 480, 300], "color": "#C06C84", "font_size": 24},
+    {"title": "KLEIN SAMPLING", "bounding": [1410, 170, 590, 520], "color": "#99B898", "font_size": 24},
+    {"title": "LOCALIZATION - MASKED COMPOSITE", "bounding": [2000, 210, 530, 700], "color": "#E9C46A", "font_size": 24},
+    {"title": "LOCAL SEAM REPAIR - NOT ADETAILER", "bounding": [2550, 210, 540, 740], "color": "#F4A261", "font_size": 24},
+    {"title": "OUTPUT PREVIEWS", "bounding": [3110, 40, 410, 930], "color": "#8AB17D", "font_size": 24}
+  ],
+  "config": {},
+  "extra": {
+    "workflow_name": "FLUX.2 Klein 9B + LoRA strong + SCHP/SAM mask + local seam repair",
+    "note": "This graph first generates a Klein candidate, then consumes an item-specific SCHP/SAM mask to composite only the target region and run a non-diffusion local seam/detail repair. It is not ADetailer."
+  },
+  "version": 0.4
+}

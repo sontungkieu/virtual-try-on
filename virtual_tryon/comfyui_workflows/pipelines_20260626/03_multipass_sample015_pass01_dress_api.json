@@ -1,0 +1,260 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "sample015_dress.png"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "sample015_person.png"
+    }
+  },
+  "3": {
+    "class_type": "LoadImageMask",
+    "inputs": {
+      "image": "sample015_dress_mask.png",
+      "channel": "red"
+    }
+  },
+  "4": {
+    "class_type": "GrowMask",
+    "inputs": {
+      "mask": [
+        "3",
+        0
+      ],
+      "expand": 16,
+      "tapered_corners": true
+    }
+  },
+  "5": {
+    "class_type": "AddMaskForICLora",
+    "inputs": {
+      "first_image": [
+        "1",
+        0
+      ],
+      "second_image": [
+        "2",
+        0
+      ],
+      "second_mask": [
+        "4",
+        0
+      ],
+      "patch_mode": "auto",
+      "output_length": 1536,
+      "patch_color": "#FF0000"
+    }
+  },
+  "6": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp8_e4m3fn.safetensors",
+      "type": "flux"
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "6",
+        0
+      ],
+      "text": "Virtual try-on photo. Replace only the dress masked region with the single reference item. Preserve all unmasked body parts, face, hair, hands, pose, lighting, and background."
+    }
+  },
+  "8": {
+    "class_type": "FluxGuidance",
+    "inputs": {
+      "conditioning": [
+        "7",
+        0
+      ],
+      "guidance": 3.5
+    }
+  },
+  "9": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "8",
+        0
+      ]
+    },
+    "_note": "negative_prompt: bad anatomy, deformed body, distorted face, extra limbs, damaged hands, wrong garment, blurry, low quality, changed background, changed identity"
+  },
+  "10": {
+    "class_type": "CLIPVisionLoader",
+    "inputs": {
+      "clip_name": "sigclip_vision_patch14_384.safetensors"
+    }
+  },
+  "11": {
+    "class_type": "CLIPVisionEncode",
+    "inputs": {
+      "clip_vision": [
+        "10",
+        0
+      ],
+      "image": [
+        "1",
+        0
+      ],
+      "crop": "center"
+    }
+  },
+  "12": {
+    "class_type": "StyleModelLoader",
+    "inputs": {
+      "style_model_name": "flux1-redux-dev.safetensors"
+    }
+  },
+  "13": {
+    "class_type": "StyleModelApply",
+    "inputs": {
+      "conditioning": [
+        "8",
+        0
+      ],
+      "style_model": [
+        "12",
+        0
+      ],
+      "clip_vision_output": [
+        "11",
+        0
+      ],
+      "strength": 1.0,
+      "strength_type": "multiply"
+    }
+  },
+  "14": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "FLUX1/ae.safetensors"
+    }
+  },
+  "15": {
+    "class_type": "InpaintModelConditioning",
+    "inputs": {
+      "positive": [
+        "13",
+        0
+      ],
+      "negative": [
+        "9",
+        0
+      ],
+      "vae": [
+        "14",
+        0
+      ],
+      "pixels": [
+        "5",
+        0
+      ],
+      "mask": [
+        "5",
+        1
+      ],
+      "noise_mask": true
+    }
+  },
+  "16": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "FLUX1/fluxFillFP8_v10.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "17": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "lora_name": "flux/catvton-flux-lora.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "18": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "17",
+        0
+      ],
+      "seed": 2026062615,
+      "steps": 24,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "positive": [
+        "15",
+        0
+      ],
+      "negative": [
+        "15",
+        1
+      ],
+      "latent_image": [
+        "15",
+        2
+      ],
+      "denoise": 1.0
+    }
+  },
+  "19": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "18",
+        0
+      ],
+      "vae": [
+        "14",
+        0
+      ]
+    }
+  },
+  "20": {
+    "class_type": "ImageCrop",
+    "inputs": {
+      "image": [
+        "19",
+        0
+      ],
+      "x": [
+        "5",
+        2
+      ],
+      "y": [
+        "5",
+        3
+      ],
+      "width": [
+        "5",
+        4
+      ],
+      "height": [
+        "5",
+        5
+      ]
+    }
+  },
+  "21": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "20",
+        0
+      ],
+      "filename_prefix": "vton_workflows/sample015/pass01_dress"
+    }
+  }
+}

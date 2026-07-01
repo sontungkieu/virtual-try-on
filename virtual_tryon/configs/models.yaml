@@ -1,0 +1,71 @@
+device: cuda
+precision: bf16
+
+idm_vton:
+  enabled: true
+  repo_path: "./third_party/IDM-VTON"
+  checkpoint_dir: "./models/idm_vton/ckpt"
+  model_name: "yisol/IDM-VTON"
+  entrypoint: "./third_party/IDM-VTON/inference.py"
+  default_width: 768
+  default_height: 1024
+  steps: 30
+  guidance_scale: 2.0
+  resident_worker: true
+  resident_worker_fallback: true
+  resident_worker_entrypoint: "./scripts/idm_vton_resident_worker.py"
+  resident_worker_startup_timeout_seconds: 900
+  resident_worker_request_timeout_seconds: 900
+  resident_worker_optimization: "eager"
+  resident_worker_torch_compile_backend: "inductor"
+  resident_worker_torch_compile_mode: "reduce-overhead"
+
+flux_refiner:
+  enabled: true
+  backend: "flux2_dev"
+  fallback_to_core: true
+  model_name: "black-forest-labs/FLUX.2-dev"
+  model_path: null
+  checkpoint_dir: "./models/flux2"
+  quantized: false
+  remote_text_encoder: false
+  max_retries: 1
+  api_url_env: "FLUX_REFINER_API_URL"
+  api_key_env: "FLUX_REFINER_API_KEY"
+  default_strength: 0.35
+  steps: 20
+  guidance_scale: 2.0
+
+catvton:
+  enabled: false
+  repo_path: "./third_party/CatVTON"
+  checkpoint_dir: "./models/catvton"
+  entrypoint: null
+
+klein_tryon_lora:
+  enabled: false
+  backend: "fal_api"
+  base_model: "black-forest-labs/FLUX.2-klein-9B"
+  lora_repo: "fal/flux-klein-9b-virtual-tryon-lora"
+  lora_weight_api: "flux-klein-tryon.safetensors"
+  lora_weight_comfy: "flux-klein-tryon-comfy.safetensors"
+  lora_path: "./models/loras/flux-klein-tryon.safetensors"
+  fal_endpoint: "fal-ai/flux-2/klein/9b/base/edit/lora"
+  num_inference_steps: 28
+  guidance_scale: 2.5
+  lora_scale: 1.0
+  resolution: 1024
+  require_three_images: true
+  fallback_on_error: true
+  timeout_seconds: 900
+  bottom_strategy: "crop_from_person"
+  bottom_crop:
+    y_start_ratio: 0.50
+    y_end_ratio: 0.98
+    x_margin_ratio: 0.08
+    save_debug: true
+
+repair:
+  enabled: true
+  mask_dilation_px: 16
+  mask_blur_radius: 8

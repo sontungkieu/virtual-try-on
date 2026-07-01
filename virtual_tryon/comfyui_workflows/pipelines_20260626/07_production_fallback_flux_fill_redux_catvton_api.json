@@ -1,0 +1,213 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "person.png"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "mask.png"
+    }
+  },
+  "3": {
+    "class_type": "ImageToMask",
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ],
+      "channel": "red"
+    }
+  },
+  "4": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "garment.png"
+    }
+  },
+  "5": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp8_e4m3fn.safetensors",
+      "type": "flux"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "5",
+        0
+      ],
+      "text": "Virtual try-on photo. Inpaint only the upper mask with the reference garment. Keep identity, face, hands, skin, body shape, pose, background, and lighting unchanged."
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "5",
+        0
+      ],
+      "text": "bad anatomy, deformed body, distorted face, extra limbs, damaged hands, wrong garment, blurry, low quality, changed background, changed identity"
+    }
+  },
+  "8": {
+    "class_type": "FluxGuidance",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "guidance": 3.5
+    }
+  },
+  "9": {
+    "class_type": "CLIPVisionLoader",
+    "inputs": {
+      "clip_name": "sigclip_vision_patch14_384.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "CLIPVisionEncode",
+    "inputs": {
+      "clip_vision": [
+        "9",
+        0
+      ],
+      "image": [
+        "4",
+        0
+      ],
+      "crop": "none"
+    }
+  },
+  "11": {
+    "class_type": "StyleModelLoader",
+    "inputs": {
+      "style_model_name": "flux1-redux-dev.safetensors"
+    }
+  },
+  "12": {
+    "class_type": "StyleModelApply",
+    "inputs": {
+      "conditioning": [
+        "8",
+        0
+      ],
+      "style_model": [
+        "11",
+        0
+      ],
+      "clip_vision_output": [
+        "10",
+        0
+      ],
+      "strength": 0.75,
+      "strength_type": "multiply"
+    }
+  },
+  "13": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "FLUX1/ae.safetensors"
+    }
+  },
+  "14": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "FLUX1/fluxFillFP8_v10.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "15": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "14",
+        0
+      ],
+      "lora_name": "flux/catvton-flux-lora.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "16": {
+    "class_type": "InpaintModelConditioning",
+    "inputs": {
+      "positive": [
+        "12",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "vae": [
+        "13",
+        0
+      ],
+      "pixels": [
+        "1",
+        0
+      ],
+      "mask": [
+        "3",
+        0
+      ],
+      "noise_mask": true
+    }
+  },
+  "17": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "15",
+        0
+      ],
+      "seed": 2026062607,
+      "steps": 24,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "positive": [
+        "16",
+        0
+      ],
+      "negative": [
+        "16",
+        1
+      ],
+      "latent_image": [
+        "16",
+        2
+      ],
+      "denoise": 1.0
+    }
+  },
+  "18": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "17",
+        0
+      ],
+      "vae": [
+        "13",
+        0
+      ]
+    }
+  },
+  "19": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "18",
+        0
+      ],
+      "filename_prefix": "vton_workflows/production_fallback"
+    }
+  }
+}

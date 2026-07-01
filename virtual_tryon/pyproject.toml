@@ -1,0 +1,59 @@
+[project]
+name = "virtual-tryon"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fal-client>=0.7.0",
+    "fastapi>=0.110",
+    "numpy>=1.26,<2",
+    "pillow>=10.0",
+    "pydantic>=2.6",
+    "python-multipart>=0.0.9",
+    "pyyaml>=6.0",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.optional-dependencies]
+tensorrt = [
+    "dllist==2.0.0",
+    "tensorrt==10.16.1.11",
+    "tensorrt-cu13==10.16.1.11",
+    "tensorrt-cu13-bindings==10.16.1.11",
+    "tensorrt-cu13-libs==10.16.1.11",
+    "torch-tensorrt==2.12.1",
+]
+idm = [
+    "accelerate==0.25.0",
+    "av>=17.1.0",
+    "basicsr>=1.4.2",
+    "cloudpickle>=3.1.2",
+    "diffusers==0.25.0",
+    "einops==0.7.0",
+    "fvcore>=0.1.5.post20221221",
+    "huggingface-hub==0.25.2",
+    "omegaconf>=2.3.1",
+    "pycocotools>=2.0.11",
+    "torchmetrics==1.2.1",
+    "transformers==4.36.2",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27",
+    "pytest>=8.0",
+]
+
+[[tool.uv.dependency-metadata]]
+name = "torch-tensorrt"
+version = "2.12.1"
+requires-dist = [
+    "dllist",
+    "filelock",
+    "numpy",
+    "packaging>=23",
+    "psutil",
+    "tensorrt>=10.16.1,<10.17.0",
+    "tensorrt-cu13>=10.16.1,<10.17.0",
+    "torch>=2.12.0,<2.13.0",
+    "typing-extensions>=4.7.0",
+]

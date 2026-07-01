@@ -1,0 +1,12 @@
+{
+  "sample_id": "sample_001",
+  "category": "upper_body",
+  "difficulty": "medium",
+  "expected_focus": [
+    "identity",
+    "garment_texture",
+    "sleeve_boundary",
+    "hair_occlusion"
+  ],
+  "notes": "Seed sample copied from the current RunPod data/examples pair used for IDM-VTON smoke tests."
+}

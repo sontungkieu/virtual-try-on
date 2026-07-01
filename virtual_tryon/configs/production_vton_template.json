@@ -1,0 +1,82 @@
+{
+  "run_name": "production_vton_example",
+  "output_root": "virtual_tryon/data/outputs/production_vton_example",
+  "person_image": "virtual_tryon/data/inputs/person.png",
+  "timeout_seconds": 2400,
+  "allow_rectangle_fallback": false,
+  "comfy": {
+    "url": "http://127.0.0.1:8188",
+    "input_dir": "/workspace/ComfyUI/input",
+    "output_dir": "/workspace/ComfyUI/output",
+    "models_dir": "/workspace/ComfyUI/models"
+  },
+  "models": {
+    "flux_fill": "unet/FLUX1/fluxFillFP8_v10.safetensors",
+    "flux_redux": "style_models/flux1-redux-dev.safetensors",
+    "sigclip": "clip_vision/sigclip_vision_patch14_384.safetensors",
+    "catviton_lora": "loras/flux/catvton-flux-lora.safetensors",
+    "vae": "vae/FLUX1/ae.safetensors",
+    "clip_l": "clip/clip_l.safetensors",
+    "t5xxl": "clip/t5xxl_fp8_e4m3fn.safetensors"
+  },
+  "defaults": {
+    "steps": 30,
+    "guidance": 3.5,
+    "denoise": 0.55,
+    "sampler": "euler",
+    "scheduler": "normal",
+    "redux_strength": 0.75,
+    "lora_strength": 1.0,
+    "use_redux": true,
+    "use_catviton_lora": true
+  },
+  "mask_postprocess": {
+    "dilation_px": 10,
+    "erosion_px": 0,
+    "feather_px": 6,
+    "threshold": 8,
+    "remove_face_hair": true,
+    "remove_hands": true
+  },
+  "refine": {
+    "enabled": false,
+    "steps": 12,
+    "denoise": 0.25,
+    "dilation_px": 10,
+    "erosion_px": 8,
+    "feather_px": 5
+  },
+  "workflow_json": null,
+  "workflow_patch": null,
+  "passes": [
+    {
+      "target_region": "dress",
+      "garment_type": "dress",
+      "garment_image": "virtual_tryon/data/inputs/yellow_dress.png",
+      "mask_image": "virtual_tryon/data/inputs/masks/dress_mask.png",
+      "positive_prompt": "High quality virtual try-on photo. The person wears the reference dress. Preserve identity, pose, body shape, hands, skin, lighting, and background.",
+      "negative_prompt": "bad anatomy, deformed body, extra limbs, distorted face, wrong garment, blurry, low quality",
+      "seed": 2026062501
+    },
+    {
+      "target_region": "shoes",
+      "garment_type": "shoes",
+      "garment_image": "virtual_tryon/data/inputs/white_shoes.png",
+      "mask_image": "virtual_tryon/data/inputs/masks/shoes_mask.png",
+      "positive_prompt": "High quality virtual try-on photo. The person wears the reference shoes. Preserve the previous outfit, identity, pose, body shape, lighting, and background.",
+      "negative_prompt": "bad anatomy, deformed feet, wrong shoes, blurry, low quality",
+      "seed": 2026062502,
+      "denoise": 0.40
+    },
+    {
+      "target_region": "hat",
+      "garment_type": "hat",
+      "garment_image": "virtual_tryon/data/inputs/pink_hat.png",
+      "mask_image": "virtual_tryon/data/inputs/masks/hat_mask.png",
+      "positive_prompt": "High quality virtual try-on photo. The person wears the reference hat. Preserve the face, identity, outfit, pose, lighting, and background.",
+      "negative_prompt": "distorted face, wrong hat, face damage, blurry, low quality",
+      "seed": 2026062503,
+      "denoise": 0.35
+    }
+  ]
+}

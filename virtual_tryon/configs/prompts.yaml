@@ -1,0 +1,13 @@
+version: 1
+default_variant: default
+production_default_engine: idm
+negative_prompt_enabled: true
+klein:
+  required_prefix: TRYON
+  require_full_body_sentence: true
+flux:
+  masked_region_only: true
+safety:
+  child_everyday_clothing_only: true
+  neutral_adult_underwear_terms: true
+  accessory_stress_warning: true

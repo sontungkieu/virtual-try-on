@@ -1,0 +1,33 @@
+app:
+  name: "Virtual Try-On"
+  environment: "development"
+  debug: true
+
+storage:
+  inputs_dir: "data/inputs"
+  outputs_dir: "data/outputs"
+  temp_dir: "data/temp"
+  public_outputs_prefix: "/artifacts"
+
+image:
+  max_side: 1536
+  output_width: 768
+  output_height: 1024
+
+preprocessing:
+  dilation_px: 18
+  blur_radius: 8
+  preserve_face: true
+  preserve_hands: true
+  preserve_hair: true
+  innerwear_dilation_px: 6
+  innerwear_blur_radius: 4
+  innerwear_use_silhouette_clip: true
+  innerwear_silhouette_clip_dilation_px: 8
+  mask_cache_enabled: true
+
+pipeline:
+  engine: "idm_vton"
+  allow_mock_engine: false
+  save_intermediates: true
+  fail_on_missing_core_model: true
