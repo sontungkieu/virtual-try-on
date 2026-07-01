@@ -143,6 +143,8 @@ uv run python scripts/benchmark_omnitry_api.py \
 
 The sweep resumes from `state.json`, updates `summary.csv` and `summary.json`, and regenerates `grid_latest.jpg` plus per-case sheets under `sheets/` after each job. It is meant for iterative engine/mask/prompt comparison: run a batch, inspect the sheets, patch the pipeline, commit, then resume until the configured no-improvement stop condition is reached.
 
+For targeted reruns after a fix, add `--case-id male_m1_male_3`, `--gender male`, or `--case-regex "male_m1"` to restrict the schedule without changing the dataset.
+
 Single-item cases run as one pass. Multi-item cases are sequential:
 
 - sample 11: top then bottom

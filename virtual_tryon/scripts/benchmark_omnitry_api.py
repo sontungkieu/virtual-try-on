@@ -169,6 +169,30 @@ def discover_cases(dataset_root: Path) -> list[OmniTryCase]:
     return cases
 
 
+def filter_cases(
+    cases: list[OmniTryCase],
+    *,
+    case_ids: list[str] | None,
+    gender: str | None,
+    case_regex: str | None,
+) -> list[OmniTryCase]:
+    selected = list(cases)
+    if case_ids:
+        wanted = set(case_ids)
+        selected = [case for case in selected if case.case_id in wanted]
+        missing = sorted(wanted - {case.case_id for case in selected})
+        if missing:
+            raise SystemExit(f"Unknown case id(s): {', '.join(missing)}")
+    if gender:
+        selected = [case for case in selected if case.gender == gender]
+    if case_regex:
+        pattern = re.compile(case_regex)
+        selected = [case for case in selected if pattern.search(case.case_id)]
+    if not selected:
+        raise SystemExit("Case filters matched no OmniTry cases.")
+    return selected
+
+
 def parse_flows(value: str) -> list[Flow]:
     flows: list[Flow] = []
     for token in value.split(","):
@@ -834,6 +858,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-base", default="http://127.0.0.1:8000", help="Try-on backend base URL.")
     parser.add_argument("--output", default=Path("data/outputs/omnitry_engine_sweep"), type=Path)
     parser.add_argument("--flows", default=DEFAULT_FLOWS, help="Comma list like idm_vton:10,idm_mask_expanded:10,klein_lora:4.")
+    parser.add_argument("--case-id", action="append", default=[], help="Run only the selected case id. Can be repeated.")
+    parser.add_argument("--case-regex", default=None, help="Run only cases whose id matches this regex.")
+    parser.add_argument("--gender", choices=["male", "female"], default=None)
     parser.add_argument("--min-jobs", default=15, type=int, help="Minimum jobs to schedule in this invocation.")
     parser.add_argument("--max-jobs", default=15, type=int, help="Maximum jobs to schedule in this invocation.")
     parser.add_argument("--stop-after-no-improvement-rounds", default=4, type=int)
@@ -857,7 +884,12 @@ def main() -> None:
     args = parse_args()
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
-    cases = discover_cases(args.dataset_root)
+    cases = filter_cases(
+        discover_cases(args.dataset_root),
+        case_ids=args.case_id,
+        gender=args.gender,
+        case_regex=args.case_regex,
+    )
     flows = parse_flows(args.flows)
     state = _load_state(output_dir, resume=not args.no_resume)
 
