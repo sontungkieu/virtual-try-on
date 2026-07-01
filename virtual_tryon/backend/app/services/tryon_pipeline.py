@@ -43,7 +43,7 @@ from app.utils.seed import normalize_seed, set_seed
 logger = logging.getLogger(__name__)
 
 
-MASK_CACHE_VERSION = "mask-v5-innerwear-shorts-coverage"
+MASK_CACHE_VERSION = "mask-v6-innerwear-hand-protection"
 MASK_CACHE_IMAGE_FILES = {
     "raw_mask": ("raw_mask.png", "L"),
     "dilated_mask": ("agnostic_mask.png", "L"),

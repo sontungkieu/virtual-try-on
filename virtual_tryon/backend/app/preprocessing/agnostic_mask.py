@@ -446,7 +446,13 @@ def _protected_region_mask(
     if preserve_face or preserve_hair:
         face_clearance = int(height * 0.22)
         draw.rectangle((0, 0, width, face_clearance), fill=255)
-    if preserve_hands and category in {*UPPER_BODY_LIKE_CATEGORIES, "dress", "full_outfit"}:
+    if preserve_hands and category in {
+        *UPPER_BODY_LIKE_CATEGORIES,
+        "lower_body",
+        *INNERWEAR_CATEGORIES,
+        "dress",
+        "full_outfit",
+    }:
         ycbcr = np.array(person_image.convert("YCbCr"), dtype=np.uint8)
         cb = ycbcr[:, :, 1]
         cr = ycbcr[:, :, 2]
@@ -568,6 +574,16 @@ def create_agnostic_mask(
             original_overlay = overlay_mask_preview(person_image, original_raw, (59, 130, 246))
             expanded_overlay = overlay_mask_preview(person_image, debug_expanded, (16, 185, 129))
             diff_overlay = overlay_mask_preview(person_image, debug_diff, (239, 68, 68))
+
+    if not experiment_enabled and config.preserve_hands and category in {"lower_body", *INNERWEAR_CATEGORIES}:
+        protected = _protected_region_mask(
+            person_image,
+            category,
+            preserve_face=False,
+            preserve_hair=False,
+            preserve_hands=True,
+        )
+        selected_raw = _clear_protected(selected_raw, protected)
 
     if protected is not None and debug_diff is not None:
         base_expanded = dilate(original_raw, config.dilation_px)
