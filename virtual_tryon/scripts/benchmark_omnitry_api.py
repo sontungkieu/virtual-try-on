@@ -326,15 +326,17 @@ def _submit_job(
     api_base: str,
     case: OmniTryCase,
     flow: Flow,
+    category: str,
     seed: int,
     width: int,
     height: int,
     auto_prompt: bool,
     prompt_variant: str,
+    prompt: str | None,
     timeout: float,
 ) -> dict[str, Any]:
     fields = {
-        "category": case.category,
+        "category": category,
         "run_mode": "async",
         "engine_mode": flow.engine_mode,
         "use_refiner": str(flow.use_refiner).lower(),
@@ -347,6 +349,8 @@ def _submit_job(
         "auto_prompt": str(auto_prompt).lower(),
         "prompt_variant": prompt_variant,
     }
+    if prompt:
+        fields["prompt"] = prompt
     files = {
         "person_image": case.person_path,
         case.garment_field: case.garment_path,
@@ -755,13 +759,14 @@ def _run_one(
     key = _round_key(round_index, case, flow)
     job_dir = output_dir / "jobs" / case.case_id / flow.label / f"round_{round_index}" / row_id
     job_dir.mkdir(parents=True, exist_ok=True)
+    category = args.category_override or case.category
 
     row: dict[str, Any] = {
         "row_id": row_id,
         "round": round_index,
         "case_id": case.case_id,
         "gender": case.gender,
-        "category": case.category,
+        "category": category,
         "flow": flow.label,
         "engine_mode": flow.engine_mode,
         "steps": flow.steps,
@@ -784,11 +789,13 @@ def _run_one(
             args.api_base,
             case,
             flow,
+            category=category,
             seed=seed,
             width=args.width,
             height=args.height,
             auto_prompt=args.auto_prompt,
             prompt_variant=args.prompt_variant,
+            prompt=args.prompt,
             timeout=submit_timeout,
         )
         job_id = str(submit_payload.get("job_id") or submit_payload.get("id") or "")
@@ -869,6 +876,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", default=30012005, type=int)
     parser.add_argument("--seed-stride", default=97, type=int)
     parser.add_argument("--prompt-variant", default="default")
+    parser.add_argument("--prompt", default=None)
+    parser.add_argument("--category-override", default=None)
     parser.add_argument("--auto-prompt", action="store_true")
     parser.add_argument("--improvement-epsilon", default=0.01, type=float)
     parser.add_argument("--poll-interval", default=3.0, type=float)
