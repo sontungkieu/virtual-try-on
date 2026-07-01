@@ -20,6 +20,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_CONTENT_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
 DEFAULT_FLOWS = "idm_vton:10,idm_mask_expanded:10,klein_lora:4"
 TERMINAL_STATUSES = {"completed", "failed", "cancelled", "canceled"}
 CSV_COLUMNS = [
@@ -264,7 +270,8 @@ def _encode_multipart(fields: dict[str, Any], files: dict[str, Path]) -> tuple[b
             ]
         )
     for name, path in files.items():
-        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        content_type = IMAGE_CONTENT_TYPES.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0]
+        content_type = content_type or "application/octet-stream"
         chunks.extend(
             [
                 f"--{boundary}\r\n".encode("utf-8"),
