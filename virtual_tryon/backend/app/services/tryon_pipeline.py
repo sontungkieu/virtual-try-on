@@ -99,6 +99,7 @@ class PipelineRequest:
     output_width: int | None = None
     output_height: int | None = None
     steps: int | None = None
+    save_intermediates: bool | None = None
     progress_callback: Callable[[str, str], None] | None = field(default=None, repr=False, compare=False)
 
 
@@ -536,6 +537,9 @@ class TryOnPipeline:
         job_dir = self.storage.job_dir(request.job_id)
         width = settings.image.output_width
         height = settings.image.output_height
+        save_intermediates = settings.pipeline.save_intermediates
+        if request.save_intermediates is not None:
+            save_intermediates = settings.pipeline.save_intermediates and request.save_intermediates
         original_person_hash = self._image_hash(request.person_image)
         prompt, refine_prompt, prompt_result = self._resolve_prompts(request, settings)
         prompt_paths = self._save_prompt_artifacts(job_dir, prompt, refine_prompt, prompt_result)
@@ -577,32 +581,35 @@ class TryOnPipeline:
             job_dir,
         )
         if engine_garment is not garment:
-            save_image(engine_garment, job_dir / "garment_engine_input.png")
+            if save_intermediates:
+                save_image(engine_garment, job_dir / "garment_engine_input.png")
         garment_seg = self.segmenter.segment(engine_garment, (width, height))
 
-        save_image(mask_result.raw_mask, job_dir / "raw_mask.png")
+        if save_intermediates:
+            save_image(mask_result.raw_mask, job_dir / "raw_mask.png")
         save_image(mask_result.dilated_mask, job_dir / "agnostic_mask.png")
-        save_image(mask_result.soft_mask, job_dir / "soft_mask.png")
-        save_image(mask_result.preview, job_dir / "mask_preview.png")
-        save_image(mask_result.agnostic_image, job_dir / "agnostic.png")
-        experiment_debug_images = {
-            "mask_original_upper_body.png": mask_result.original_upper_body_mask,
-            "mask_expanded_upper_body.png": mask_result.expanded_upper_body_mask,
-            "mask_diff_upper_body.png": mask_result.diff_upper_body_mask,
-            "mask_original_upper_body_overlay.png": mask_result.original_upper_body_overlay,
-            "mask_expanded_upper_body_overlay.png": mask_result.expanded_upper_body_overlay,
-            "mask_diff_upper_body_overlay.png": mask_result.diff_upper_body_overlay,
-        }
-        for filename, image in experiment_debug_images.items():
-            if image is not None:
-                save_image(image, job_dir / filename)
-        if mask_result.innerwear_shape_mask is not None:
-            save_image(mask_result.innerwear_shape_mask, job_dir / "mask_innerwear_shape.png")
-        if mask_result.body_silhouette_mask is not None:
-            save_image(mask_result.body_silhouette_mask, job_dir / "mask_body_silhouette.png")
-        save_image(garment_seg.cloth_mask, job_dir / "cloth_mask.png")
-        save_image(garment_seg.normalized_crop, job_dir / "garment_normalized.png")
-        if densepose.densepose_path is None:
+        if save_intermediates:
+            save_image(mask_result.soft_mask, job_dir / "soft_mask.png")
+            save_image(mask_result.preview, job_dir / "mask_preview.png")
+            save_image(mask_result.agnostic_image, job_dir / "agnostic.png")
+            experiment_debug_images = {
+                "mask_original_upper_body.png": mask_result.original_upper_body_mask,
+                "mask_expanded_upper_body.png": mask_result.expanded_upper_body_mask,
+                "mask_diff_upper_body.png": mask_result.diff_upper_body_mask,
+                "mask_original_upper_body_overlay.png": mask_result.original_upper_body_overlay,
+                "mask_expanded_upper_body_overlay.png": mask_result.expanded_upper_body_overlay,
+                "mask_diff_upper_body_overlay.png": mask_result.diff_upper_body_overlay,
+            }
+            for filename, image in experiment_debug_images.items():
+                if image is not None:
+                    save_image(image, job_dir / filename)
+            if mask_result.innerwear_shape_mask is not None:
+                save_image(mask_result.innerwear_shape_mask, job_dir / "mask_innerwear_shape.png")
+            if mask_result.body_silhouette_mask is not None:
+                save_image(mask_result.body_silhouette_mask, job_dir / "mask_body_silhouette.png")
+            save_image(garment_seg.cloth_mask, job_dir / "cloth_mask.png")
+            save_image(garment_seg.normalized_crop, job_dir / "garment_normalized.png")
+        if save_intermediates and densepose.densepose_path is None:
             save_image(person, job_dir / "densepose_placeholder.png")
         self._emit_progress(request, "running", "completed")
 
@@ -647,12 +654,13 @@ class TryOnPipeline:
         current_image = core_image
 
         refine_masks = build_refine_masks(person, mask_result.soft_mask, settings.refinement)
-        save_image(refine_masks.garment_refine_mask, job_dir / "garment_refine_mask.png")
-        save_image(refine_masks.boundary_refine_mask, job_dir / "boundary_refine_mask.png")
-        save_image(refine_masks.safe_refine_mask, job_dir / "safe_refine_mask.png")
-        save_image(refine_masks.garment_overlay, job_dir / "garment_refine_mask_overlay.png")
-        save_image(refine_masks.boundary_overlay, job_dir / "boundary_refine_mask_overlay.png")
-        save_image(refine_masks.safe_overlay, job_dir / "safe_refine_mask_overlay.png")
+        if save_intermediates:
+            save_image(refine_masks.garment_refine_mask, job_dir / "garment_refine_mask.png")
+            save_image(refine_masks.boundary_refine_mask, job_dir / "boundary_refine_mask.png")
+            save_image(refine_masks.safe_refine_mask, job_dir / "safe_refine_mask.png")
+            save_image(refine_masks.garment_overlay, job_dir / "garment_refine_mask_overlay.png")
+            save_image(refine_masks.boundary_overlay, job_dir / "boundary_refine_mask_overlay.png")
+            save_image(refine_masks.safe_overlay, job_dir / "safe_refine_mask_overlay.png")
         active_refine_mask = select_refine_mask(refine_masks, settings.refinement.mask_mode)
 
         quality: QualityScores = run_quality_checks(
@@ -767,6 +775,7 @@ class TryOnPipeline:
                 "use_refiner": request.use_refiner,
                 "repair_mode": request.repair_mode,
                 "deterministic": request.deterministic,
+                "save_intermediates": save_intermediates,
                 "auto_prompt": request.auto_prompt,
                 "prompt_variant": request.prompt_variant,
                 "testcase_id": request.testcase_id,

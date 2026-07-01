@@ -212,6 +212,7 @@ async def create_tryon(
     output_width: Annotated[int | None, Form()] = None,
     output_height: Annotated[int | None, Form()] = None,
     steps: Annotated[int | None, Form()] = None,
+    save_intermediates: Annotated[bool | None, Form()] = None,
 ) -> TryOnStatusResponse:
     if not any([garment_top, garment_bottom, garment_dress]):
         raise ApiError("INVALID_REQUEST", "At least one garment image is required.", status_code=400)
@@ -275,6 +276,7 @@ async def create_tryon(
         output_width=output_width,
         output_height=output_height,
         steps=steps,
+        save_intermediates=save_intermediates,
     )
     settings = get_settings()
     selected_run_mode = (run_mode or settings.api.run_mode).lower()

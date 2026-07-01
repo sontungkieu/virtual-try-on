@@ -40,9 +40,16 @@ CSV_COLUMNS = [
     "seed",
     "width",
     "height",
+    "save_intermediates",
     "status",
     "job_id",
     "runtime_seconds",
+    "backend_runtime_seconds",
+    "stage_running_seconds",
+    "stage_generating_seconds",
+    "stage_refining_seconds",
+    "stage_completed_seconds",
+    "poll_overhead_seconds",
     "score",
     "improved",
     "background_preservation_score",
@@ -333,6 +340,7 @@ def _submit_job(
     auto_prompt: bool,
     prompt_variant: str,
     prompt: str | None,
+    save_intermediates: bool,
     timeout: float,
 ) -> dict[str, Any]:
     fields = {
@@ -348,6 +356,7 @@ def _submit_job(
         "steps": flow.steps,
         "auto_prompt": str(auto_prompt).lower(),
         "prompt_variant": prompt_variant,
+        "save_intermediates": str(save_intermediates).lower(),
     }
     if prompt:
         fields["prompt"] = prompt
@@ -497,6 +506,32 @@ def _float_or_none(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _stage_runtime_map(job: dict[str, Any]) -> dict[str, float]:
+    values: dict[str, float] = {}
+    stages = job.get("stages")
+    if not isinstance(stages, list):
+        return values
+    for stage in stages:
+        if not isinstance(stage, dict):
+            continue
+        key = stage.get("key")
+        value = _float_or_none(stage.get("runtime_seconds"))
+        if isinstance(key, str) and value is not None:
+            values[key] = value
+    return values
+
+
+def _backend_runtime_seconds(stage_times: dict[str, float]) -> float | None:
+    included = [
+        stage_times[key]
+        for key in ("running", "generating", "refining", "completed")
+        if key in stage_times
+    ]
+    if not included:
+        return None
+    return round(sum(included), 3)
 
 
 def _quality_metrics(job: dict[str, Any], quality_report: dict[str, Any] | None) -> dict[str, Any]:
@@ -773,9 +808,16 @@ def _run_one(
         "seed": seed,
         "width": args.width,
         "height": args.height,
+        "save_intermediates": args.save_intermediates,
         "status": "submitted",
         "job_id": "",
         "runtime_seconds": None,
+        "backend_runtime_seconds": None,
+        "stage_running_seconds": None,
+        "stage_generating_seconds": None,
+        "stage_refining_seconds": None,
+        "stage_completed_seconds": None,
+        "poll_overhead_seconds": None,
         "score": None,
         "improved": False,
         "result_path": "",
@@ -796,6 +838,7 @@ def _run_one(
             auto_prompt=args.auto_prompt,
             prompt_variant=args.prompt_variant,
             prompt=args.prompt,
+            save_intermediates=args.save_intermediates,
             timeout=submit_timeout,
         )
         job_id = str(submit_payload.get("job_id") or submit_payload.get("id") or "")
@@ -820,6 +863,15 @@ def _run_one(
             )
         row["status"] = str(job_payload.get("status") or "unknown").lower()
         row["runtime_seconds"] = round(time.monotonic() - start, 3)
+        stage_times = _stage_runtime_map(job_payload)
+        backend_runtime = _backend_runtime_seconds(stage_times)
+        row["backend_runtime_seconds"] = backend_runtime
+        row["stage_running_seconds"] = stage_times.get("running")
+        row["stage_generating_seconds"] = stage_times.get("generating")
+        row["stage_refining_seconds"] = stage_times.get("refining")
+        row["stage_completed_seconds"] = stage_times.get("completed")
+        if backend_runtime is not None:
+            row["poll_overhead_seconds"] = max(0.0, round(row["runtime_seconds"] - backend_runtime, 3))
         _write_json(job_dir / "job_status.json", job_payload)
         downloaded = _download_artifacts(args.api_base, job_payload, job_dir, request_timeout=args.request_timeout)
         result_path = _first_existing(
@@ -880,7 +932,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--category-override", default=None)
     parser.add_argument("--auto-prompt", action="store_true")
     parser.add_argument("--improvement-epsilon", default=0.01, type=float)
-    parser.add_argument("--poll-interval", default=3.0, type=float)
+    parser.add_argument("--poll-interval", default=0.5, type=float)
+    parser.add_argument(
+        "--save-intermediates",
+        action="store_true",
+        help="Ask the backend to save full debug masks/overlays/crops for each job.",
+    )
     parser.add_argument("--job-timeout", default=900.0, type=float)
     parser.add_argument("--request-timeout", default=60.0, type=float)
     parser.add_argument("--submit-timeout", default=None, type=float)

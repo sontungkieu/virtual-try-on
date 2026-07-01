@@ -16,6 +16,7 @@ const resolutionPresets = [
   { label: "Quality 768x1024", width: 768, height: 1024 },
   { label: "Square 768x768", width: 768, height: 768 }
 ];
+const JOB_POLL_INTERVAL_MS = 500;
 
 function generateButtonLabel(state: ReturnType<typeof useTryOnStore.getState>) {
   if (!state.loading) return "Generate";
@@ -96,6 +97,7 @@ function App() {
       form.append("output_height", String(state.outputHeight));
       form.append("steps", String(state.steps));
       form.append("deterministic", String(state.deterministic));
+      form.append("save_intermediates", String(state.showDebug));
       if (state.seedMode === "fixed") form.append("seed", String(state.seed));
       form.append("auto_prompt", String(state.autoPrompt));
       form.append("prompt_variant", state.promptVariant);
@@ -105,7 +107,7 @@ function App() {
       setField("result", result);
       setField("jobId", result.job_id);
       while (["queued", "running", "cancel_requested"].includes(result.status)) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        await new Promise((resolve) => window.setTimeout(resolve, JOB_POLL_INTERVAL_MS));
         result = await getTryOnJob(result.job_id);
         setField("result", result);
         setField("jobId", result.job_id);
