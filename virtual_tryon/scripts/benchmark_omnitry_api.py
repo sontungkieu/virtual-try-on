@@ -311,6 +311,7 @@ def _submit_job(
 ) -> dict[str, Any]:
     fields = {
         "category": case.category,
+        "run_mode": "async",
         "engine_mode": flow.engine_mode,
         "use_refiner": str(flow.use_refiner).lower(),
         "repair_mode": str(flow.repair_mode).lower(),
