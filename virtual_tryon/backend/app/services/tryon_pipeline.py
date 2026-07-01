@@ -63,11 +63,13 @@ MASK_CACHE_IMAGE_FILES = {
 
 INNERWEAR_DEFAULT_PROMPTS = {
     "men_underwear": (
-        "replace only the adult men's underwear bottom region with the reference underwear garment; "
+        "replace the masked lower-body clothing with the adult men's underwear from the reference garment; "
+        "remove original shorts, pants, briefs, and old fabric patterns inside the target mask completely; "
         "preserve face, pose, body shape, upper-body clothing, legs outside the target region, and background"
     ),
     "women_underwear": (
-        "replace only the adult women's underwear bottom region with the reference underwear garment; "
+        "replace the masked lower-body clothing with the adult women's underwear from the reference garment; "
+        "remove original shorts, pants, briefs, and old fabric patterns inside the target mask completely; "
         "preserve face, pose, body shape, upper-body clothing, legs outside the target region, and background"
     ),
     "women_bra": (
@@ -482,6 +484,8 @@ class TryOnPipeline:
         job_dir: Path,
     ) -> Image.Image:
         if category not in {*INNERWEAR_BOTTOM_CATEGORIES, *INNERWEAR_TOP_CATEGORIES}:
+            return garment
+        if not settings.preprocessing.innerwear_reference_crop_enabled:
             return garment
 
         try:

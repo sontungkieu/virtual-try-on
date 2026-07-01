@@ -34,6 +34,7 @@ class PreprocessingConfig(BaseModel):
     innerwear_blur_radius: int = 5
     innerwear_use_silhouette_clip: bool = True
     innerwear_silhouette_clip_dilation_px: int = 8
+    innerwear_reference_crop_enabled: bool = False
     mask_cache_enabled: bool = True
 
 
