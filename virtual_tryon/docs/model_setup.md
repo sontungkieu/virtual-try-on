@@ -172,7 +172,7 @@ idm_vton:
   resident_worker_optimization: "eager"
 ```
 
-Set `TRYON_IDM_RESIDENT_WORKER=false` before starting the backend to disable the worker without editing YAML. Set `TRYON_IDM_WORKER_OPTIMIZATION=torch_compile` for an experimental compiled worker. With fallback enabled, a worker startup/runtime failure writes `idm_vton_resident_error.txt` and then runs the previous subprocess adapter.
+Set `TRYON_IDM_RESIDENT_WORKER=false` before starting the backend to disable the worker without editing YAML. Set `TRYON_IDM_WORKER_OPTIMIZATION=torch_compile` for an experimental compiled worker. Set `TRYON_IDM_WORKER_OPTIMIZATION=tensorrt` plus `TRYON_TRT_PROFILE=stable` or `TRYON_TRT_PROFILE=full_safe` to use Torch-TensorRT in the resident worker. `stable` compiles VAE decode only. `full_safe` compiles IDM UNet blocks, IDM UNet encoder blocks, and VAE decode with conservative partitioning; on the RTX 3090 Ti pod it completed a 512x768 4-step smoke run but measured slower than eager after warmup. With fallback enabled, a worker startup/runtime failure writes `idm_vton_resident_error.txt` and then runs the previous subprocess adapter.
 
 ## Baseline Suite
 
@@ -261,6 +261,8 @@ klein_tryon_lora:
   device_map: "cpu_offload"
   quantization: "none"
   quantize_components: ["transformer", "text_encoder"]
+  tensorrt_profile: "none"
+  tensorrt_components: []
 ```
 
 `enabled: false` keeps IDM-VTON as the production default. Selecting `klein_lora` in the benchmark, ablation script, or optional API `engine_mode` explicitly opts into the experimental adapter.
@@ -293,6 +295,7 @@ export TRYON_KLEIN_DEVICE_MAP=cuda
 export TRYON_KLEIN_DEVICE_MAP=cuda
 export TRYON_KLEIN_QUANTIZATION=bnb_4bit
 export TRYON_KLEIN_QUANTIZE_COMPONENTS=transformer,text_encoder
+export TRYON_KLEIN_TRT_PROFILE=none
 ```
 
 Supported local placement values are `cpu_offload`, `sequential_cpu_offload`,
@@ -305,6 +308,27 @@ still OOMs when only the transformer can be quantized; `bnb_4bit` over
 12.0 GB peak CUDA allocation.
 The worker writes `device_map`, `quantization`, quantized components, and CUDA
 peak allocation/reservation into `worker_result.json`.
+
+Klein TensorRT is controlled separately from IDM-VTON:
+
+```bash
+# Stable opt-in profile: compile only VAE decode.
+export TRYON_KLEIN_TRT_PROFILE=vae_decode
+export TRYON_KLEIN_TRT_ENGINE_CACHE_DIR=data/temp/klein_tensorrt_cache
+export TRYON_KLEIN_TRT_MIN_BLOCK_SIZE=5
+
+# Debug-only profiles. These are rejected when the transformer is bnb-quantized.
+export TRYON_KLEIN_TRT_PROFILE=transformer_debug
+export TRYON_KLEIN_TRT_PROFILE=full_debug
+```
+
+On the current 24 GB pod, `vae_decode` compiled successfully with the bnb 4-bit
+all-GPU Klein setup, but the first worker run was slower than no TensorRT
+because the local Klein adapter launches a fresh subprocess per job and the
+engine is built during the first inference call. The transformer/full profiles
+are not a production path for this setup: Torch-TensorRT rejects the
+bitsandbytes UInt8 transformer graph, while unquantized full-GPU Klein has
+already OOMed on 24 GB.
 
 `download_klein_local_models.py` downloads:
 

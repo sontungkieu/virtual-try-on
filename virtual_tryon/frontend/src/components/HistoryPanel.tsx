@@ -39,6 +39,11 @@ function formatStageTimings(item: TryOnHistoryItem) {
     .join(" · ");
 }
 
+function formatSeed(item: TryOnHistoryItem) {
+  if (item.config.seed == null) return "seed n/a";
+  return `seed ${item.config.seed}${item.config.deterministic ? " deterministic" : ""}`;
+}
+
 function inputImages(item: TryOnHistoryItem) {
   return [
     ["Person", item.inputs.person_url],
@@ -111,7 +116,7 @@ export function HistoryPanel() {
               </div>
               <div className="history-meta">
                 <strong>{item.config.category ?? "unknown"} · {item.status}</strong>
-                <span>{item.config.output_width ?? "?"}x{item.config.output_height ?? "?"} · {item.config.steps ?? "?"} steps · {item.config.engine ?? "engine"}</span>
+                <span>{item.config.output_width ?? "?"}x{item.config.output_height ?? "?"} · {item.config.steps ?? "?"} steps · {formatSeed(item)} · {item.config.engine ?? "engine"}</span>
                 <span>{formatTime(item.finished_at ?? item.created_at)} · {formatRuntime(item.runtime_seconds)}</span>
                 {stageTimings ? <span className="history-stage-times">{stageTimings}</span> : null}
                 <small>{item.job_id}</small>

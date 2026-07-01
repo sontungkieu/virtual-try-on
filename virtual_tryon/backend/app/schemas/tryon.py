@@ -70,6 +70,7 @@ class TryOnResponse(BaseModel):
     quality: QualityScores | None = None
     error: str | None = None
     seed: int | None = None
+    deterministic: bool | None = None
 
 
 class TryOnStatusResponse(TryOnResponse):
@@ -99,6 +100,7 @@ class GenerationConfigSummary(BaseModel):
     output_height: int | None = None
     steps: int | None = None
     seed: int | None = None
+    deterministic: bool | None = None
     engine: str | None = None
     category: str | None = None
     prompt: str | None = None

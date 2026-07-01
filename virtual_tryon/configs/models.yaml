@@ -60,6 +60,10 @@ klein_tryon_lora:
   device_map: "cpu_offload"
   quantization: "none"
   quantize_components: ["transformer", "text_encoder"]
+  tensorrt_profile: "none"
+  tensorrt_components: []
+  tensorrt_engine_cache_dir: "./data/temp/klein_tensorrt_cache"
+  tensorrt_min_block_size: 5
   require_three_images: true
   fallback_on_error: true
   timeout_seconds: 900

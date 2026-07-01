@@ -38,6 +38,7 @@ export type TryOnResult = {
   error?: string | null;
   error_code?: string | null;
   seed?: number | null;
+  deterministic?: boolean | null;
   current_stage?: string | null;
   stages?: PipelineStage[];
   engine_status?: Record<string, string>;
@@ -86,6 +87,7 @@ export type TryOnHistoryItem = {
     output_height?: number | null;
     steps?: number | null;
     seed?: number | null;
+    deterministic?: boolean | null;
     engine?: string | null;
     category?: string | null;
     prompt?: string | null;
@@ -118,6 +120,9 @@ type TryOnState = {
   outputWidth: number;
   outputHeight: number;
   steps: number;
+  seedMode: "random" | "fixed";
+  seed: number;
+  deterministic: boolean;
   showDebug: boolean;
   loading: boolean;
   jobId?: string;
@@ -140,6 +145,9 @@ export const useTryOnStore = create<TryOnState>((set) => ({
   outputWidth: 768,
   outputHeight: 1024,
   steps: 30,
+  seedMode: "random",
+  seed: 2026070201,
+  deterministic: false,
   showDebug: true,
   loading: false,
   setField: (key, value) => set({ [key]: value } as Partial<TryOnState>),

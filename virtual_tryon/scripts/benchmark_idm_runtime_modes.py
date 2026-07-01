@@ -49,6 +49,7 @@ CSV_COLUMNS = [
     "error",
 ]
 TENSORRT_ENV_KEYS = (
+    "TRYON_TRT_PROFILE",
     "TRYON_TRT_MODULES",
     "TRYON_TRT_PARTITION_PRESET",
     "TRYON_TRT_TORCH_EXECUTED_OPS",
@@ -299,6 +300,8 @@ def _temporary_env(overrides: dict[str, str | None]):
 
 def _tensorrt_env_overrides(args: argparse.Namespace, output_dir: Path) -> dict[str, str]:
     overrides: dict[str, str] = {}
+    if args.tensorrt_profile:
+        overrides["TRYON_TRT_PROFILE"] = args.tensorrt_profile
     if args.tensorrt_modules:
         overrides["TRYON_TRT_MODULES"] = args.tensorrt_modules
     if args.tensorrt_partition_preset:
@@ -324,6 +327,9 @@ def _tensorrt_env_overrides(args: argparse.Namespace, output_dir: Path) -> dict[
     if args.allow_unsafe_tensorrt_unet:
         overrides["TRYON_TRT_ALLOW_UNSAFE_UNET"] = "true"
     cache_dir = args.tensorrt_engine_cache_dir or (output_dir / "tensorrt_engine_cache")
+    if not cache_dir.is_absolute():
+        cache_dir = PROJECT_ROOT / cache_dir
+    cache_dir = cache_dir.resolve()
     overrides["TRYON_TRT_ENGINE_CACHE_DIR"] = str(cache_dir)
     return overrides
 
@@ -488,6 +494,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--startup-timeout", type=int, default=900)
     parser.add_argument("--request-timeout", type=int, default=900)
     parser.add_argument("--tensorrt-modules", default=None)
+    parser.add_argument(
+        "--tensorrt-profile",
+        default=None,
+        help=(
+            "TensorRT worker profile. Use stable for VAE decode only, full_safe for blockwise "
+            "UNet+UNet-encoder+VAE with conservative partitioning, or whole_unet_debug for isolated debugging."
+        ),
+    )
     parser.add_argument("--tensorrt-partition-preset", default=None)
     parser.add_argument("--tensorrt-torch-executed-ops", default=None)
     parser.add_argument("--tensorrt-min-block-size", type=int, default=None)
@@ -529,6 +543,7 @@ def main() -> int:
         "person": str(args.person),
         "garment_top": str(args.garment_top),
         "tensorrt": {
+            "profile": args.tensorrt_profile,
             "modules": args.tensorrt_modules,
             "partition_preset": args.tensorrt_partition_preset,
             "torch_executed_ops": args.tensorrt_torch_executed_ops,

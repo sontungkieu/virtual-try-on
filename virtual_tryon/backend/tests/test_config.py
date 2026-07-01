@@ -37,6 +37,10 @@ def test_klein_local_env_overrides(monkeypatch, tmp_path):
     monkeypatch.setenv("TRYON_KLEIN_DEVICE_MAP", "cuda")
     monkeypatch.setenv("TRYON_KLEIN_QUANTIZATION", "torchao_int8")
     monkeypatch.setenv("TRYON_KLEIN_QUANTIZE_COMPONENTS", "transformer,text_encoder")
+    monkeypatch.setenv("TRYON_KLEIN_TRT_PROFILE", "vae_decode")
+    monkeypatch.setenv("TRYON_KLEIN_TRT_COMPONENTS", "vae_decode")
+    monkeypatch.setenv("TRYON_KLEIN_TRT_ENGINE_CACHE_DIR", str(tmp_path / "trt-cache"))
+    monkeypatch.setenv("TRYON_KLEIN_TRT_MIN_BLOCK_SIZE", "7")
 
     settings = load_settings()
 
@@ -46,3 +50,7 @@ def test_klein_local_env_overrides(monkeypatch, tmp_path):
     assert settings.klein_tryon_lora.device_map == "cuda"
     assert settings.klein_tryon_lora.quantization == "torchao_int8"
     assert settings.klein_tryon_lora.quantize_components == ["transformer", "text_encoder"]
+    assert settings.klein_tryon_lora.tensorrt_profile == "vae_decode"
+    assert settings.klein_tryon_lora.tensorrt_components == ["vae_decode"]
+    assert settings.klein_tryon_lora.tensorrt_engine_cache_dir == tmp_path / "trt-cache"
+    assert settings.klein_tryon_lora.tensorrt_min_block_size == 7

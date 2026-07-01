@@ -145,6 +145,9 @@ def _history_item_from_dir(job_dir) -> TryOnHistoryItem | None:
             output_height=generation_config.get("output_height") or engine_settings.get("default_height"),
             steps=generation_config.get("steps") or engine_settings.get("steps"),
             seed=metadata.get("seed") or job_payload.get("seed"),
+            deterministic=request_config.get("deterministic")
+            if "deterministic" in request_config
+            else job_payload.get("deterministic"),
             engine=metadata.get("engine"),
             category=request_config.get("category") or metadata.get("category"),
             prompt=metadata.get("prompt"),
@@ -202,6 +205,7 @@ async def create_tryon(
     run_mode: Annotated[str | None, Form()] = None,
     engine_mode: Annotated[str | None, Form()] = None,
     seed: Annotated[int | None, Form()] = None,
+    deterministic: Annotated[bool, Form()] = False,
     testcase_id: Annotated[str | None, Form()] = None,
     prompt_variant: Annotated[str, Form()] = "default",
     auto_prompt: Annotated[bool, Form()] = False,
@@ -251,6 +255,7 @@ async def create_tryon(
 
     job_service = get_job_service()
     job_id = job_service.new_job_id()
+    normalized_seed = normalize_seed(seed)
     request = PipelineRequest(
         job_id=job_id,
         person_image=person,
@@ -261,7 +266,8 @@ async def create_tryon(
         prompt=prompt,
         use_refiner=use_refiner,
         repair_mode=repair_mode,
-        seed=seed,
+        seed=normalized_seed,
+        deterministic=deterministic,
         engine_mode=engine_mode,
         testcase_id=testcase_id,
         prompt_variant=prompt_variant,

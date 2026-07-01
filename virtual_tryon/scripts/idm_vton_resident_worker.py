@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL_PREFIX = "__IDM_VTON_WORKER__ "
 NEGATIVE_PROMPT = "monochrome, lowres, bad anatomy, worst quality, low quality"
 DEFAULT_TENSORRT_MODULES = ("vae_decode",)
@@ -29,8 +30,46 @@ TENSORRT_MODULE_ALIASES = {
     "vae.decode": "vae_decode",
     "stable": "vae_decode",
     "safe": "vae_decode",
+    "full": "unet_blocks",
     "safe_unet": "unet_blocks",
     "safe_unet_encoder": "unet_encoder_blocks",
+}
+TENSORRT_PROFILES: dict[str, dict[str, Any]] = {
+    "stable": {
+        "modules": ",".join(DEFAULT_TENSORRT_MODULES),
+        "partition_preset": "attention",
+        "min_block_size": 5,
+        "allow_unsafe_unet": False,
+    },
+    "full_safe": {
+        "modules": "all",
+        "partition_preset": "safe_unet",
+        "min_block_size": 20,
+        "allow_unsafe_unet": True,
+    },
+    "full_attention": {
+        "modules": "all",
+        "partition_preset": "attention",
+        "min_block_size": 5,
+        "allow_unsafe_unet": True,
+    },
+    "whole_unet_debug": {
+        "modules": "unet,unet_encoder,vae_decode",
+        "partition_preset": "attention",
+        "min_block_size": 5,
+        "allow_unsafe_unet": True,
+    },
+}
+TENSORRT_PROFILE_ALIASES = {
+    "default": "stable",
+    "safe": "stable",
+    "vae": "stable",
+    "vae_decode": "stable",
+    "full": "full_safe",
+    "safe_full": "full_safe",
+    "all": "full_safe",
+    "debug_full": "whole_unet_debug",
+    "whole_unet": "whole_unet_debug",
 }
 TENSORRT_OP_PRESETS = {
     "none": (),
@@ -77,6 +116,36 @@ TENSORRT_OP_PRESETS = {
 }
 
 
+def _bool_text(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_tensorrt_profile(value: str | None) -> str:
+    raw = (value or "stable").strip().lower().replace("-", "_")
+    profile = TENSORRT_PROFILE_ALIASES.get(raw, raw)
+    if profile not in TENSORRT_PROFILES:
+        valid = sorted(set(TENSORRT_PROFILES) | set(TENSORRT_PROFILE_ALIASES))
+        raise RuntimeError(
+            "Invalid TRYON_TRT_PROFILE value: "
+            + raw
+            + f". Valid values: {', '.join(valid)}."
+        )
+    return profile
+
+
+def _tensorrt_profile_defaults() -> dict[str, Any]:
+    return TENSORRT_PROFILES[_normalize_tensorrt_profile(os.environ.get("TRYON_TRT_PROFILE"))]
+
+
+def resolve_tensorrt_cache_dir(raw: str | Path) -> Path:
+    cache_dir = Path(raw)
+    if not cache_dir.is_absolute():
+        cache_dir = PROJECT_ROOT / cache_dir
+    return cache_dir.resolve()
+
+
 def _emit(payload: dict[str, Any], output) -> None:
     print(PROTOCOL_PREFIX + json.dumps(payload, separators=(",", ":"), default=str), file=output, flush=True)
 
@@ -106,6 +175,11 @@ class ResidentIDMVTonPipeline:
         self.optimization_mode = optimization_mode
         self.torch_compile_backend = torch_compile_backend
         self.torch_compile_mode = torch_compile_mode
+        self._tensorrt_profile = (
+            _normalize_tensorrt_profile(os.environ.get("TRYON_TRT_PROFILE"))
+            if optimization_mode == "tensorrt"
+            else None
+        )
         self._requested_tensorrt_modules = self._tensorrt_modules() if optimization_mode == "tensorrt" else set()
         sys.path.insert(0, str(self.repo_path))
         os.chdir(self.repo_path)
@@ -223,14 +297,12 @@ class ResidentIDMVTonPipeline:
         raise RuntimeError(f"Unsupported optimization mode: {self.optimization_mode}")
 
     def _tensorrt_options(self) -> dict[str, Any]:
-        cache_dir = Path(
-            os.environ.get(
-                "TRYON_TRT_ENGINE_CACHE_DIR",
-                "/tmp/torch_tensorrt_engine_cache/idm_vton",
-            )
+        profile_defaults = _tensorrt_profile_defaults()
+        cache_dir = resolve_tensorrt_cache_dir(
+            os.environ.get("TRYON_TRT_ENGINE_CACHE_DIR", "/tmp/torch_tensorrt_engine_cache/idm_vton")
         )
         cache_dir.mkdir(parents=True, exist_ok=True)
-        min_block_size = int(os.environ.get("TRYON_TRT_MIN_BLOCK_SIZE", "5"))
+        min_block_size = int(os.environ.get("TRYON_TRT_MIN_BLOCK_SIZE", str(profile_defaults["min_block_size"])))
         workspace_size = int(os.environ.get("TRYON_TRT_WORKSPACE_SIZE", "0"))
         optimization_level_text = os.environ.get("TRYON_TRT_OPTIMIZATION_LEVEL")
         optimization_level = int(optimization_level_text) if optimization_level_text else None
@@ -242,8 +314,11 @@ class ResidentIDMVTonPipeline:
             "require_full_compilation": False,
             "min_block_size": min_block_size,
             "workspace_size": workspace_size,
-            "use_fast_partitioner": self._bool_env("TRYON_TRT_USE_FAST_PARTITIONER", True),
-            "pass_through_build_failures": self._bool_env("TRYON_TRT_PASS_THROUGH_BUILD_FAILURES", False),
+            "use_fast_partitioner": _bool_text(os.environ.get("TRYON_TRT_USE_FAST_PARTITIONER"), True),
+            "pass_through_build_failures": _bool_text(
+                os.environ.get("TRYON_TRT_PASS_THROUGH_BUILD_FAILURES"),
+                False,
+            ),
             "cache_built_engines": True,
             "reuse_cached_engines": True,
             "engine_cache_dir": str(cache_dir),
@@ -253,9 +328,9 @@ class ResidentIDMVTonPipeline:
         }
         if optimization_level is not None:
             options["optimization_level"] = optimization_level
-        if self._bool_env("TRYON_TRT_ENABLE_RESOURCE_PARTITIONING", False):
+        if _bool_text(os.environ.get("TRYON_TRT_ENABLE_RESOURCE_PARTITIONING"), False):
             options["enable_resource_partitioning"] = True
-        if self._bool_env("TRYON_TRT_LAZY_ENGINE_INIT", False):
+        if _bool_text(os.environ.get("TRYON_TRT_LAZY_ENGINE_INIT"), False):
             options["lazy_engine_init"] = True
         if cpu_memory_budget is not None:
             options["cpu_memory_budget"] = cpu_memory_budget
@@ -285,10 +360,7 @@ class ResidentIDMVTonPipeline:
 
     @staticmethod
     def _bool_env(name: str, default: bool = False) -> bool:
-        value = os.environ.get(name)
-        if value is None:
-            return default
-        return value.strip().lower() in {"1", "true", "yes", "on"}
+        return _bool_text(os.environ.get(name), default)
 
     def _tensorrt_op_target(self, name: str) -> Any:
         if name.startswith("aten."):
@@ -303,7 +375,8 @@ class ResidentIDMVTonPipeline:
         raise RuntimeError(f"Invalid TensorRT torch-executed op: {name}. Use aten.<op>.<overload>.")
 
     def _tensorrt_torch_executed_ops(self) -> set[Any]:
-        preset_text = os.environ.get("TRYON_TRT_PARTITION_PRESET", "attention")
+        profile_defaults = _tensorrt_profile_defaults()
+        preset_text = os.environ.get("TRYON_TRT_PARTITION_PRESET", profile_defaults["partition_preset"])
         op_text = os.environ.get("TRYON_TRT_TORCH_EXECUTED_OPS")
         names: list[str] = []
         if preset_text:
@@ -321,7 +394,8 @@ class ResidentIDMVTonPipeline:
 
     @staticmethod
     def _tensorrt_modules() -> set[str]:
-        raw = os.environ.get("TRYON_TRT_MODULES", ",".join(DEFAULT_TENSORRT_MODULES))
+        profile_defaults = _tensorrt_profile_defaults()
+        raw = os.environ.get("TRYON_TRT_MODULES", profile_defaults["modules"])
         requested = {item.strip().lower() for item in raw.split(",") if item.strip()}
         if not requested or requested == {"none"}:
             return set()
@@ -337,12 +411,10 @@ class ResidentIDMVTonPipeline:
                 + f". Valid values: {', '.join(VALID_TENSORRT_MODULES)}, all, none."
             )
         unsafe = sorted(requested & UNSAFE_TENSORRT_UNET_MODULES)
-        allow_unsafe_unet = os.environ.get("TRYON_TRT_ALLOW_UNSAFE_UNET", "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        allow_unsafe_unet = _bool_text(
+            os.environ.get("TRYON_TRT_ALLOW_UNSAFE_UNET"),
+            bool(profile_defaults["allow_unsafe_unet"]),
+        )
         if unsafe and not allow_unsafe_unet:
             raise RuntimeError(
                 "TensorRT UNet modules are disabled by default because Torch-TensorRT/TensorRT can segfault "
@@ -403,6 +475,21 @@ class ResidentIDMVTonPipeline:
             return self.torch.cuda.amp.autocast()
         return contextlib.nullcontext()
 
+    def _configure_request_determinism(self, seed: int, deterministic: bool) -> None:
+        if hasattr(self.torch, "use_deterministic_algorithms"):
+            try:
+                self.torch.use_deterministic_algorithms(bool(deterministic), warn_only=True)
+            except TypeError:
+                self.torch.use_deterministic_algorithms(bool(deterministic))
+        if hasattr(self.torch.backends, "cudnn"):
+            self.torch.backends.cudnn.deterministic = bool(deterministic)
+            self.torch.backends.cudnn.benchmark = not bool(deterministic)
+        if hasattr(self.torch.backends, "cuda") and hasattr(self.torch.backends.cuda, "matmul"):
+            self.torch.backends.cuda.matmul.allow_tf32 = not bool(deterministic)
+        self.torch.manual_seed(seed)
+        if self.torch.cuda.is_available():
+            self.torch.cuda.manual_seed_all(seed)
+
     def run(self, request: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
         output_dir = Path(request["output_dir"])
@@ -412,7 +499,9 @@ class ResidentIDMVTonPipeline:
         steps = int(request["num_inference_steps"])
         guidance_scale = float(request["guidance_scale"])
         seed = int(request["seed"])
+        deterministic = bool(request.get("deterministic", False))
         order = "unpaired" if request.get("unpaired", True) else "paired"
+        self._configure_request_determinism(seed, deterministic)
 
         dataset = self.VitonHDTestDataset(
             dataroot_path=str(request["data_dir"]),
@@ -504,11 +593,14 @@ class ResidentIDMVTonPipeline:
         return {
             "ok": True,
             "optimization_mode": self.optimization_mode,
+            "tensorrt_profile": self._tensorrt_profile if self.optimization_mode == "tensorrt" else None,
             "tensorrt_modules": sorted(self._requested_tensorrt_modules)
             if self.optimization_mode == "tensorrt"
             else [],
             "runtime_seconds": time.perf_counter() - started,
             "output_dir": str(output_dir),
+            "seed": seed,
+            "deterministic": deterministic,
         }
 
 
@@ -546,6 +638,8 @@ def main() -> int:
                 "optimization_mode": worker.optimization_mode,
                 "torch_compile_backend": worker.torch_compile_backend,
                 "torch_compile_mode": worker.torch_compile_mode,
+                "tensorrt_profile": worker._tensorrt_profile,
+                "tensorrt_modules": sorted(worker._requested_tensorrt_modules),
                 "load_runtime_seconds": time.perf_counter() - load_started,
             },
             protocol_output,

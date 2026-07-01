@@ -7,6 +7,7 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from app.core.config import EngineConfig
@@ -16,6 +17,8 @@ from app.utils.errors import ModelUnavailableError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def _config(**overrides) -> EngineConfig:
@@ -198,6 +201,10 @@ def test_klein_lora_local_run_uses_diffusers_pipeline(monkeypatch, tmp_path):
             device_map="cuda",
             quantization="torchao_int8",
             quantize_components=["transformer"],
+            tensorrt_profile="vae_decode",
+            tensorrt_components=["vae_decode"],
+            tensorrt_engine_cache_dir=tmp_path / "trt-cache",
+            tensorrt_min_block_size=7,
         )
     )
     result = engine.run(_inputs(tmp_path))
@@ -217,6 +224,10 @@ def test_klein_lora_local_run_uses_diffusers_pipeline(monkeypatch, tmp_path):
     assert local_payload["device_map"] == "cuda"
     assert local_payload["quantization"] == "torchao_int8"
     assert local_payload["quantize_components"] == ["transformer"]
+    assert local_payload["tensorrt_profile"] == "vae_decode"
+    assert local_payload["tensorrt_components"] == ["vae_decode"]
+    assert local_payload["tensorrt_engine_cache_dir"] == str(tmp_path / "trt-cache")
+    assert local_payload["tensorrt_min_block_size"] == 7
 
 
 def test_klein_lora_cache_key_includes_placement_and_quantization(tmp_path):
@@ -242,10 +253,66 @@ def test_klein_lora_cache_key_includes_placement_and_quantization(tmp_path):
             device_map="cuda",
             quantization="torchao_int8",
             quantize_components=["transformer"],
+            tensorrt_profile="vae_decode",
+            tensorrt_components=["vae_decode"],
         )
     )
 
     assert base._local_cache_key() != quantized._local_cache_key()
+
+
+def test_klein_lora_cache_key_includes_tensorrt(tmp_path):
+    model_dir = tmp_path / "flux2-klein-9b"
+    model_dir.mkdir()
+    lora_path = tmp_path / "flux-klein-tryon.safetensors"
+    lora_path.write_bytes(b"fake")
+
+    base = KleinTryOnLoraEngine(
+        _config(
+            backend="diffusers_local",
+            model_path=model_dir,
+            lora_path=lora_path,
+            tensorrt_profile="none",
+        )
+    )
+    trt = KleinTryOnLoraEngine(
+        _config(
+            backend="diffusers_local",
+            model_path=model_dir,
+            lora_path=lora_path,
+            tensorrt_profile="vae_decode",
+            tensorrt_components=["vae_decode"],
+        )
+    )
+
+    assert base._local_cache_key() != trt._local_cache_key()
+
+
+def test_klein_tensorrt_guard_rejects_quantized_transformer():
+    from scripts.klein_diffusers_local_worker import (
+        normalize_tensorrt_components,
+        validate_tensorrt_request,
+    )
+
+    components = normalize_tensorrt_components("full_debug", [])
+    with pytest.raises(RuntimeError, match="quantized transformer"):
+        validate_tensorrt_request(
+            "full_debug",
+            components,
+            quantization="bnb_4bit",
+            quantize_components=["transformer", "text_encoder"],
+        )
+
+
+def test_klein_tensorrt_profile_aliases():
+    from scripts.klein_diffusers_local_worker import (
+        normalize_tensorrt_components,
+        normalize_tensorrt_profile,
+    )
+
+    assert normalize_tensorrt_profile("stable") == "vae_decode"
+    assert normalize_tensorrt_components("vae_decode", []) == ["vae_decode"]
+    assert normalize_tensorrt_components("full_debug", None) == ["transformer", "vae_decode"]
 
 
 def test_klein_lora_bottom_crop_from_person(monkeypatch, tmp_path):

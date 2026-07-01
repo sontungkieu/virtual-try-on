@@ -82,18 +82,38 @@ Modes:
 
 - `eager`: resident IDM worker without compiler changes.
 - `torch_compile`: resident worker with `torch.compile` on IDM UNet modules. The first warmup per shape includes compile overhead.
-- `tensorrt`: experimental Torch-TensorRT backend for resident IDM. It requires `uv sync --extra idm --extra tensorrt`; the default module set is the stable `vae_decode` path. IDM UNet TensorRT is disabled by default because Torch-TensorRT/TensorRT can crash inside the native builder on these graphs.
+- `tensorrt`: experimental Torch-TensorRT backend for resident IDM. It requires `uv sync --extra idm --extra tensorrt`; the default profile is the stable `vae_decode` path. IDM UNet TensorRT is still opt-in because aggressive partitions can hang or crash inside native TensorRT builder code.
 
 TensorRT tuning flags:
 
-- `--tensorrt-modules vae_decode`: stable smoke bench and production-safe TensorRT path.
-- `--tensorrt-modules all --allow-unsafe-tensorrt-unet`: compile IDM UNet block-wise (`unet_blocks`, `unet_encoder_blocks`) plus `vae_decode` for isolated experiments. This avoids wrapping the entire UNet forward pass in one graph, but it can still fail or crash in the native builder.
+- `--tensorrt-profile stable`: stable smoke bench and production-safe TensorRT path; compiles `vae_decode` only.
+- `--tensorrt-profile full_safe`: tested full resident path for 24 GB GPUs; compiles IDM UNet block-wise (`unet_blocks`, `unet_encoder_blocks`) plus `vae_decode`, uses `safe_unet` partitioning, and sets `min_block_size=20`.
+- `--tensorrt-profile full_attention`: aggressive block-wise full path with attention kept in PyTorch. On the RTX 3090 Ti pod this can spend minutes in Dynamo/TensorRT tracing before first output.
+- `--tensorrt-profile whole_unet_debug`: aggressive whole-UNet debugging profile. Do not use this for production jobs.
+- `--tensorrt-modules vae_decode`: override profile modules explicitly.
+- `--tensorrt-modules all --allow-unsafe-tensorrt-unet`: compile IDM UNet block-wise (`unet_blocks`, `unet_encoder_blocks`) plus `vae_decode` for isolated experiments.
 - `--tensorrt-modules unet,unet_encoder,vae_decode --allow-unsafe-tensorrt-unet`: aggressive whole-UNet debugging mode. Do not use this for production jobs.
-- `--tensorrt-partition-preset attention|none|shape|matmul|norm|conv|safe_unet`: choose ATen ops that must stay in PyTorch to split unsafe TensorRT partitions. `safe_unet` keeps convolution, attention, reshape, matmul, and norm ops in PyTorch to avoid the most fragile TensorRT UNet partitions, so it is mainly useful for debugging rather than speed.
+- `--tensorrt-partition-preset attention|none|shape|matmul|norm|conv|safe_unet`: choose ATen ops that must stay in PyTorch to split unsafe TensorRT partitions. `safe_unet` keeps convolution, attention, reshape, matmul, and norm ops in PyTorch to avoid the most fragile TensorRT UNet partitions.
 - `--tensorrt-torch-executed-ops`: comma-separated explicit ATen ops such as `aten._reshape_copy.default`.
 - `--tensorrt-min-block-size`, `--tensorrt-workspace-size`, and `--tensorrt-optimization-level`: pass through to the Torch-TensorRT Dynamo backend.
 - `--tensorrt-enable-resource-partitioning`, `--tensorrt-cpu-memory-budget`, and `--tensorrt-lazy-engine-init`: extra safety knobs for native TensorRT builder memory pressure.
-- `--tensorrt-engine-cache-dir`: set a persistent engine/timing cache path.
+- `--tensorrt-engine-cache-dir`: set a persistent engine/timing cache path. Relative paths are resolved under the project root before they are passed into the worker.
+
+Example full-safe smoke run:
+
+```bash
+uv run python scripts/benchmark_idm_runtime_modes.py \
+  --modes tensorrt \
+  --presets 512x768 \
+  --steps 4 \
+  --warmup 1 \
+  --repeat 1 \
+  --tensorrt-profile full_safe \
+  --tensorrt-engine-cache-dir data/temp/trt_engine_cache_idm_full_safe \
+  --output data/outputs/idm_runtime_benchmark_tensorrt_full_safe
+```
+
+On the RTX 3090 Ti pod, `full_safe` completed a 512x768 4-step run with a 92.1s warmup/build, 1.59s measured worker runtime, and about 17.5 GB VRAM after warmup. Eager on the same sample measured about 1.23s, so this profile is currently a deployable compatibility path rather than a guaranteed speedup.
 
 Output:
 
@@ -221,7 +241,7 @@ uv run python scripts/run_klein_lora_ablation.py \
   --output data/outputs/klein_lora_ablation_test
 ```
 
-Without the local Klein base model, LoRA file, or `klein-local` dependencies, the script still creates `summary.csv`, `summary.json`, `comparison_grid.png`, `comparison_index.html`, and `manual_ratings_klein_lora.csv`; Klein rows are marked unavailable and include sanitized status artifacts. With `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and a Diffusers build that exports `Flux2KleinPipeline`, the same command attempts the local endpoint. Record `TRYON_KLEIN_DEVICE_MAP` and `TRYON_KLEIN_QUANTIZATION` with timing results because `cpu_offload`, full `cuda`, and quantized `cuda` have different VRAM and runtime behavior.
+Without the local Klein base model, LoRA file, or `klein-local` dependencies, the script still creates `summary.csv`, `summary.json`, `comparison_grid.png`, `comparison_index.html`, and `manual_ratings_klein_lora.csv`; Klein rows are marked unavailable and include sanitized status artifacts. With `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and a Diffusers build that exports `Flux2KleinPipeline`, the same command attempts the local endpoint. Record `TRYON_KLEIN_DEVICE_MAP`, `TRYON_KLEIN_QUANTIZATION`, and `TRYON_KLEIN_TRT_PROFILE` with timing results because `cpu_offload`, full `cuda`, quantized `cuda`, and the VAE-decode TensorRT profile have different VRAM and first-run behavior.
 
 Before a local run, download/validate assets:
 
@@ -235,8 +255,15 @@ export TRYON_KLEIN_PYTHON=/workspace/venvs/project_phase2_klein/bin/python
 export TRYON_KLEIN_DEVICE_MAP=cuda
 export TRYON_KLEIN_QUANTIZATION=bnb_4bit
 export TRYON_KLEIN_QUANTIZE_COMPONENTS=transformer,text_encoder
+export TRYON_KLEIN_TRT_PROFILE=none
 $TRYON_KLEIN_PYTHON scripts/download_klein_local_models.py
 ```
+
+`TRYON_KLEIN_TRT_PROFILE=vae_decode` is the only supported Klein TensorRT
+profile for the bnb 4-bit all-GPU setup. It compiles `vae.decode` and records
+TensorRT metadata in `worker_result.json`. `transformer_debug` and `full_debug`
+are debug profiles and fail fast when the transformer is quantized because
+Torch-TensorRT cannot compile the bnb UInt8 transformer graph.
 
 `scripts/check_fal_runtime.py --strict` is still available only for the optional `TRYON_KLEIN_BACKEND=fal_api` path.
 

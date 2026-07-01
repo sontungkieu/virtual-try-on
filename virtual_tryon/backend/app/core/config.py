@@ -101,6 +101,10 @@ class EngineConfig(BaseModel):
     quantization: str = "none"
     quantize_components: list[str] = Field(default_factory=lambda: ["transformer", "text_encoder"])
     device_map: str = "cpu_offload"
+    tensorrt_profile: str = "none"
+    tensorrt_components: list[str] = Field(default_factory=list)
+    tensorrt_engine_cache_dir: Path | None = None
+    tensorrt_min_block_size: int | None = None
     remote_text_encoder: bool = False
     max_retries: int = 1
     api_url_env: str | None = None
@@ -204,7 +208,15 @@ def _resolve_paths(config: dict[str, Any]) -> dict[str, Any]:
 
     for section in ["idm_vton", "flux_refiner", "catvton", "klein_tryon_lora"]:
         section_config = config.get(section, {})
-        for key in ["repo_path", "checkpoint_dir", "lora_path", "entrypoint", "model_path", "resident_worker_entrypoint"]:
+        for key in [
+            "repo_path",
+            "checkpoint_dir",
+            "lora_path",
+            "entrypoint",
+            "model_path",
+            "resident_worker_entrypoint",
+            "tensorrt_engine_cache_dir",
+        ]:
             if section_config.get(key):
                 section_config[key] = resolve_project_path(section_config[key])
     return config
@@ -262,6 +274,26 @@ def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
             for item in klein_quantize_components.split(",")
             if item.strip()
         ]
+
+    klein_trt_profile = os.getenv("TRYON_KLEIN_TRT_PROFILE")
+    if klein_trt_profile:
+        config.setdefault("klein_tryon_lora", {})["tensorrt_profile"] = klein_trt_profile
+
+    klein_trt_components = os.getenv("TRYON_KLEIN_TRT_COMPONENTS")
+    if klein_trt_components:
+        config.setdefault("klein_tryon_lora", {})["tensorrt_components"] = [
+            item.strip()
+            for item in klein_trt_components.split(",")
+            if item.strip()
+        ]
+
+    klein_trt_engine_cache_dir = os.getenv("TRYON_KLEIN_TRT_ENGINE_CACHE_DIR")
+    if klein_trt_engine_cache_dir:
+        config.setdefault("klein_tryon_lora", {})["tensorrt_engine_cache_dir"] = klein_trt_engine_cache_dir
+
+    klein_trt_min_block_size = os.getenv("TRYON_KLEIN_TRT_MIN_BLOCK_SIZE")
+    if klein_trt_min_block_size:
+        config.setdefault("klein_tryon_lora", {})["tensorrt_min_block_size"] = int(klein_trt_min_block_size)
 
     device = os.getenv("TRYON_DEVICE")
     if device:

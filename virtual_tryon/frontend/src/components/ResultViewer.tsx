@@ -118,6 +118,7 @@ export function ResultViewer() {
         <div>
           <strong>{result.status}</strong>
           <span>{result.job_id}</span>
+          <span>{result.seed == null ? "seed n/a" : `seed ${result.seed}${result.deterministic ? " deterministic" : ""}`}</span>
         </div>
         <div className="result-actions">
           <button className="icon-button neutral" type="button" onClick={copyJobId} title="Copy job ID">

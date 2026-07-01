@@ -89,6 +89,7 @@ class PipelineRequest:
     use_refiner: bool
     repair_mode: bool
     seed: int | None = None
+    deterministic: bool = False
     engine_mode: str | None = None
     testcase_id: str | None = None
     prompt_variant: str = "default"
@@ -468,7 +469,7 @@ class TryOnPipeline:
         self.validate_inputs(request)
         settings = self._settings_for_request(request)
         seed = normalize_seed(request.seed)
-        set_seed(seed)
+        set_seed(seed, deterministic=request.deterministic)
         self._emit_progress(request, "running", "running")
 
         job_dir = self.storage.job_dir(request.job_id)
@@ -557,6 +558,7 @@ class TryOnPipeline:
                 "mask_path": job_dir / "agnostic_mask.png",
                 "human_parse": human_parse.warning,
                 "densepose": densepose.warning,
+                "deterministic": request.deterministic,
             },
         )
 
@@ -692,6 +694,7 @@ class TryOnPipeline:
                 "engine_mode": request.engine_mode,
                 "use_refiner": request.use_refiner,
                 "repair_mode": request.repair_mode,
+                "deterministic": request.deterministic,
                 "auto_prompt": request.auto_prompt,
                 "prompt_variant": request.prompt_variant,
                 "testcase_id": request.testcase_id,
@@ -753,4 +756,5 @@ class TryOnPipeline:
             ),
             quality=quality,
             seed=seed,
+            deterministic=request.deterministic,
         )

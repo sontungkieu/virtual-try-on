@@ -155,9 +155,29 @@ class KleinTryOnLoraEngine:
                 "device_map": self.config.device_map,
                 "quantization": self.config.quantization,
                 "quantize_components": list(self.config.quantize_components),
+                "tensorrt_profile": self.config.tensorrt_profile,
+                "tensorrt_components": list(self.config.tensorrt_components),
+                "tensorrt_engine_cache_dir": (
+                    str(self.config.tensorrt_engine_cache_dir)
+                    if self.config.tensorrt_engine_cache_dir
+                    else None
+                ),
+                "tensorrt_min_block_size": self.config.tensorrt_min_block_size,
             },
             sort_keys=True,
         )
+
+    def _tensorrt_payload(self) -> dict[str, Any]:
+        return {
+            "tensorrt_profile": self.config.tensorrt_profile,
+            "tensorrt_components": list(self.config.tensorrt_components),
+            "tensorrt_engine_cache_dir": (
+                str(self.config.tensorrt_engine_cache_dir)
+                if self.config.tensorrt_engine_cache_dir
+                else None
+            ),
+            "tensorrt_min_block_size": self.config.tensorrt_min_block_size,
+        }
 
     @property
     def local_worker_python(self) -> str:
@@ -221,6 +241,7 @@ class KleinTryOnLoraEngine:
                 quantization_config = None
                 if self.config.quantization != "none":
                     from scripts.klein_diffusers_local_worker import (
+                        apply_klein_tensorrt_optimization,
                         build_quantization_config,
                         normalize_components,
                         normalize_quantization,
@@ -229,6 +250,12 @@ class KleinTryOnLoraEngine:
                     quantization_config = build_quantization_config(
                         normalize_quantization(self.config.quantization),
                         normalize_components(self.config.quantize_components),
+                    )
+                else:
+                    from scripts.klein_diffusers_local_worker import (
+                        apply_klein_tensorrt_optimization,
+                        normalize_components,
+                        normalize_quantization,
                     )
                 from_pretrained_kwargs = {
                     "torch_dtype": torch.bfloat16,
@@ -272,6 +299,15 @@ class KleinTryOnLoraEngine:
             if hasattr(pipe, "set_adapters"):
                 pipe.set_adapters(["tryon"], adapter_weights=[float(self.config.lora_scale)])
 
+            apply_klein_tensorrt_optimization(
+                pipe,
+                profile=self.config.tensorrt_profile,
+                components=list(self.config.tensorrt_components),
+                quantization=normalize_quantization(self.config.quantization),
+                quantize_components=normalize_components(self.config.quantize_components),
+                engine_cache_dir=self.config.tensorrt_engine_cache_dir,
+                min_block_size=self.config.tensorrt_min_block_size,
+            )
             _LOCAL_PIPE_CACHE[cache_key] = pipe
             return pipe
 
@@ -464,6 +500,7 @@ class KleinTryOnLoraEngine:
             "device_map": self.config.device_map,
             "quantization": self.config.quantization,
             "quantize_components": list(self.config.quantize_components),
+            **self._tensorrt_payload(),
         }
 
     @staticmethod
@@ -562,10 +599,11 @@ class KleinTryOnLoraEngine:
         references: KleinReferences,
         output_dir: Path,
         seed: int | None,
+        deterministic: bool,
     ) -> TryOnResult:
         if self.config.entrypoint:
-            return self._run_diffusers_local_subprocess(prompt, references, output_dir, seed)
-        return self._run_diffusers_local_in_process(prompt, references, output_dir, seed)
+            return self._run_diffusers_local_subprocess(prompt, references, output_dir, seed, deterministic)
+        return self._run_diffusers_local_in_process(prompt, references, output_dir, seed, deterministic)
 
     def _run_diffusers_local_subprocess(
         self,
@@ -573,6 +611,7 @@ class KleinTryOnLoraEngine:
         references: KleinReferences,
         output_dir: Path,
         seed: int | None,
+        deterministic: bool,
     ) -> TryOnResult:
         if not self.config.entrypoint:
             raise ModelUnavailableError("Klein Try-On LoRA local worker entrypoint is not configured.")
@@ -594,10 +633,12 @@ class KleinTryOnLoraEngine:
             "guidance_scale": self.config.guidance_scale,
             "lora_scale": self.config.lora_scale,
             "seed": seed,
+            "deterministic": deterministic,
             "image_paths": image_paths,
             "device_map": self.config.device_map,
             "quantization": self.config.quantization,
             "quantize_components": list(self.config.quantize_components),
+            **self._tensorrt_payload(),
             "local_files_only": True,
             "worker_python": self.local_worker_python,
             "worker_entrypoint": str(self.config.entrypoint),
@@ -650,9 +691,11 @@ class KleinTryOnLoraEngine:
             "device_map": self.config.device_map,
             "quantization": self.config.quantization,
             "quantize_components": list(self.config.quantize_components),
+            **self._tensorrt_payload(),
             "width": width,
             "height": height,
             "seed": seed,
+            "deterministic": deterministic,
             "bottom_source": references.bottom_source,
             "warnings": references.warnings,
         }
@@ -664,6 +707,7 @@ class KleinTryOnLoraEngine:
         references: KleinReferences,
         output_dir: Path,
         seed: int | None,
+        deterministic: bool,
     ) -> TryOnResult:
         if self.config.require_three_images and references.bottom_image is None:
             raise ModelUnavailableError("Klein Try-On LoRA requires three image references for diffusers_local.")
@@ -690,9 +734,11 @@ class KleinTryOnLoraEngine:
                 "width": width,
                 "height": height,
                 "seed": seed,
+                "deterministic": deterministic,
                 "device_map": self.config.device_map,
                 "quantization": self.config.quantization,
                 "quantize_components": list(self.config.quantize_components),
+                **self._tensorrt_payload(),
                 "local_files_only": True,
             },
         )
@@ -736,9 +782,12 @@ class KleinTryOnLoraEngine:
             "device_map": self.config.device_map,
             "quantization": self.config.quantization,
             "quantize_components": list(self.config.quantize_components),
+            **self._tensorrt_payload(),
+            "tensorrt": getattr(pipe, "_vton_tensorrt_metadata", {}),
             "width": width,
             "height": height,
             "seed": seed,
+            "deterministic": deterministic,
             "bottom_source": references.bottom_source,
             "warnings": references.warnings,
         }
@@ -794,7 +843,13 @@ class KleinTryOnLoraEngine:
             if self.config.backend == "fal_api":
                 result = self._run_fal_api(prompt, references, output_dir)
             elif self.config.backend == "diffusers_local":
-                result = self._run_diffusers_local(prompt, references, output_dir, inputs.seed)
+                result = self._run_diffusers_local(
+                    prompt,
+                    references,
+                    output_dir,
+                    inputs.seed,
+                    bool(inputs.extra.get("deterministic", False)),
+                )
             else:
                 raise ModelUnavailableError("Klein Try-On LoRA backend is disabled.")
         except Exception as exc:

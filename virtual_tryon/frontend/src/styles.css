@@ -291,7 +291,7 @@ textarea {
   background: #fff;
   padding: 12px;
   display: grid;
-  grid-template-columns: minmax(150px, 1.4fr) repeat(3, minmax(92px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
   gap: 10px;
   align-items: end;
 }
@@ -312,6 +312,24 @@ textarea {
   border-radius: 6px;
   background: #fff;
   padding: 7px 8px;
+}
+
+.seed-control div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 6px;
+}
+
+.deterministic-toggle {
+  min-height: 35px;
+  display: flex !important;
+  align-items: center;
+  gap: 8px !important;
+  padding-bottom: 2px;
+}
+
+.deterministic-toggle input {
+  width: auto;
 }
 
 .preview-grid {

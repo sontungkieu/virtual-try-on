@@ -33,6 +33,22 @@ REQUIRED_CHECKPOINTS = (
     "openpose/ckpts/body_pose_model.pth",
 )
 RESIDENT_PROTOCOL_PREFIX = "__IDM_VTON_WORKER__ "
+TENSORRT_RESIDENT_ENV_KEYS = (
+    "TRYON_TRT_PROFILE",
+    "TRYON_TRT_MODULES",
+    "TRYON_TRT_PARTITION_PRESET",
+    "TRYON_TRT_TORCH_EXECUTED_OPS",
+    "TRYON_TRT_MIN_BLOCK_SIZE",
+    "TRYON_TRT_WORKSPACE_SIZE",
+    "TRYON_TRT_OPTIMIZATION_LEVEL",
+    "TRYON_TRT_ENGINE_CACHE_DIR",
+    "TRYON_TRT_ENABLE_RESOURCE_PARTITIONING",
+    "TRYON_TRT_CPU_MEMORY_BUDGET",
+    "TRYON_TRT_LAZY_ENGINE_INIT",
+    "TRYON_TRT_PASS_THROUGH_BUILD_FAILURES",
+    "TRYON_TRT_USE_FAST_PARTITIONER",
+    "TRYON_TRT_ALLOW_UNSAFE_UNET",
+)
 
 
 def _worker_script_for_config(config: EngineConfig) -> Path:
@@ -218,6 +234,11 @@ _RESIDENT_ATEXIT_REGISTERED = False
 
 
 def _resident_client_key(config: EngineConfig) -> str:
+    tensorrt_env = (
+        {key: os.environ.get(key) for key in TENSORRT_RESIDENT_ENV_KEYS}
+        if config.resident_worker_optimization == "tensorrt"
+        else {}
+    )
     return json.dumps(
         {
             "python": sys.executable,
@@ -227,6 +248,7 @@ def _resident_client_key(config: EngineConfig) -> str:
             "optimization": config.resident_worker_optimization,
             "torch_compile_backend": config.resident_worker_torch_compile_backend,
             "torch_compile_mode": config.resident_worker_torch_compile_mode,
+            "tensorrt_env": tensorrt_env,
         },
         sort_keys=True,
     )
@@ -409,7 +431,12 @@ class IDMVTonEngine:
         ]
         return command
 
-    def build_resident_request(self, context: IDMVTonRunContext, seed: int | None) -> dict[str, Any]:
+    def build_resident_request(
+        self,
+        context: IDMVTonRunContext,
+        seed: int | None,
+        deterministic: bool = False,
+    ) -> dict[str, Any]:
         return {
             "data_dir": str(context.data_dir),
             "output_dir": str(context.output_dir),
@@ -421,6 +448,7 @@ class IDMVTonEngine:
             "guidance_scale": self.config.guidance_scale,
             "unpaired": True,
             "optimization_mode": self.config.resident_worker_optimization,
+            "deterministic": deterministic,
         }
 
     @staticmethod
@@ -469,8 +497,14 @@ class IDMVTonEngine:
             )
         return command_text
 
-    def _run_resident(self, context: IDMVTonRunContext, job_dir: Path, seed: int | None) -> str:
-        request = self.build_resident_request(context, seed)
+    def _run_resident(
+        self,
+        context: IDMVTonRunContext,
+        job_dir: Path,
+        seed: int | None,
+        deterministic: bool = False,
+    ) -> str:
+        request = self.build_resident_request(context, seed, deterministic)
         command_text = "resident-idm-vton-worker " + json.dumps(request, sort_keys=True, default=str)
         (job_dir / "idm_vton_command.txt").write_text(command_text, encoding="utf-8")
         (job_dir / "idm_vton_worker_request.json").write_text(json.dumps(request, indent=2, default=str), encoding="utf-8")
@@ -493,7 +527,12 @@ class IDMVTonEngine:
         runtime_backend = "subprocess"
         if self.config.resident_worker:
             try:
-                command_text = self._run_resident(context, job_dir, inputs.seed)
+                command_text = self._run_resident(
+                    context,
+                    job_dir,
+                    inputs.seed,
+                    bool(inputs.extra.get("deterministic", False)),
+                )
                 runtime_backend = "resident_worker"
             except Exception as exc:
                 (job_dir / "idm_vton_resident_error.txt").write_text(str(exc), encoding="utf-8")

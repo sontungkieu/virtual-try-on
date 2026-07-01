@@ -311,6 +311,8 @@ class JobService:
                         updated_at=finished,
                         cancel_requested=True,
                         retry_count=attempt,
+                        seed=request.seed,
+                        deterministic=request.deterministic,
                     ),
                     time.monotonic() - started,
                     engine=engine_name,
@@ -339,6 +341,8 @@ class JobService:
                             updated_at=finished,
                             cancel_requested=True,
                             retry_count=attempt,
+                            seed=request.seed,
+                            deterministic=request.deterministic,
                         ),
                         runtime,
                         engine=engine_name,
@@ -359,6 +363,8 @@ class JobService:
                             finished_at=finished,
                             updated_at=finished,
                             retry_count=attempt,
+                            seed=request.seed,
+                            deterministic=request.deterministic,
                         ),
                         runtime,
                         engine=engine_name,
@@ -413,6 +419,8 @@ class JobService:
                 finished_at=finished,
                 updated_at=finished,
                 retry_count=max_retries,
+                seed=request.seed,
+                deterministic=request.deterministic,
             ),
             runtime,
             engine=engine_name,
@@ -432,6 +440,8 @@ class JobService:
             created_at=now,
             started_at=now,
             updated_at=now,
+            seed=request.seed,
+            deterministic=request.deterministic,
         )
         self._apply_stage(running, "queued", "completed", when=now)
         self._apply_stage(running, "running", "running", when=now)
@@ -447,7 +457,14 @@ class JobService:
         if settings.queue_policy == "reject" and self._active_size() >= settings.max_concurrent_jobs:
             raise QueueFullError()
         now = self._now()
-        queued = TryOnStatusResponse(job_id=request.job_id, status="queued", created_at=now, updated_at=now)
+        queued = TryOnStatusResponse(
+            job_id=request.job_id,
+            status="queued",
+            created_at=now,
+            updated_at=now,
+            seed=request.seed,
+            deterministic=request.deterministic,
+        )
         self._apply_stage(queued, "queued", "running", when=now)
         self._log_event(request.job_id, "queue", "queued", engine=self._engine_for_request(request))
         return self._save_job(queued)

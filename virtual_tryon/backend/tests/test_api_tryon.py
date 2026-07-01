@@ -110,6 +110,8 @@ def test_tryon_accepts_generation_overrides(client, png_file):
             "output_width": "512",
             "output_height": "768",
             "steps": "12",
+            "seed": "98765",
+            "deterministic": "true",
         },
         files={
             "person_image": png_file("person.png", (170, 170, 170)),
@@ -119,6 +121,8 @@ def test_tryon_accepts_generation_overrides(client, png_file):
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "completed"
+    assert payload["seed"] == 98765
+    assert payload["deterministic"] is True
 
     history = api.get("/tryon/history?limit=5")
     assert history.status_code == 200
@@ -131,6 +135,8 @@ def test_tryon_accepts_generation_overrides(client, png_file):
     assert newest["config"]["output_width"] == 512
     assert newest["config"]["output_height"] == 768
     assert newest["config"]["steps"] == 12
+    assert newest["config"]["seed"] == 98765
+    assert newest["config"]["deterministic"] is True
     assert newest["finished_at"]
     assert newest["current_stage"] == "completed"
     assert {stage["key"] for stage in newest["stages"]} >= {"queued", "running", "generating", "refining", "completed"}

@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Loader2, Play, X } from "lucide-react";
+import { Loader2, Play, Shuffle, X } from "lucide-react";
 import { cancelTryOnJob, getTryOnJob, submitTryOn, TryOnApiError } from "./lib/api";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { ResultViewer } from "./components/ResultViewer";
@@ -52,6 +52,11 @@ function App() {
     setField("outputHeight", preset.height);
   }
 
+  function randomizeSeed() {
+    setField("seed", Math.floor(Math.random() * 2_147_483_647));
+    setField("seedMode", "fixed");
+  }
+
   function displayError(error: unknown) {
     if (error instanceof TryOnApiError) {
       const labels: Record<string, string> = {
@@ -86,6 +91,8 @@ function App() {
       form.append("output_width", String(state.outputWidth));
       form.append("output_height", String(state.outputHeight));
       form.append("steps", String(state.steps));
+      form.append("deterministic", String(state.deterministic));
+      if (state.seedMode === "fixed") form.append("seed", String(state.seed));
       form.append("auto_prompt", String(state.autoPrompt));
       form.append("prompt_variant", state.promptVariant);
       if (state.testcaseId.trim()) form.append("testcase_id", state.testcaseId.trim());
@@ -245,6 +252,38 @@ function App() {
               value={state.steps}
               onChange={(e) => setField("steps", Number(e.target.value))}
             />
+          </label>
+          <label>
+            <span>Seed</span>
+            <select value={state.seedMode} onChange={(e) => setField("seedMode", e.target.value as typeof state.seedMode)}>
+              <option value="random">Random each job</option>
+              <option value="fixed">Fixed seed</option>
+            </select>
+          </label>
+          <label className="seed-control">
+            <span>Value</span>
+            <div>
+              <input
+                type="number"
+                min={0}
+                max={2147483646}
+                step={1}
+                value={state.seed}
+                disabled={state.seedMode === "random"}
+                onChange={(e) => setField("seed", Number(e.target.value))}
+              />
+              <button className="icon-button neutral" type="button" onClick={randomizeSeed} title="Randomize fixed seed">
+                <Shuffle size={16} />
+              </button>
+            </div>
+          </label>
+          <label className="deterministic-toggle">
+            <input
+              type="checkbox"
+              checked={state.deterministic}
+              onChange={(e) => setField("deterministic", e.target.checked)}
+            />
+            Deterministic
           </label>
         </section>
 

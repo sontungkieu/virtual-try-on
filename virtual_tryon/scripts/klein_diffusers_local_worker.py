@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 import time
@@ -10,7 +11,37 @@ from typing import Any
 from PIL import Image, ImageOps
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_QUANTIZE_COMPONENTS = ["transformer", "text_encoder"]
+DEFAULT_TENSORRT_CACHE_DIR = PROJECT_ROOT / "data" / "temp" / "klein_tensorrt_cache"
+TENSORRT_PROFILE_ALIASES = {
+    "": "none",
+    "off": "none",
+    "false": "none",
+    "no": "none",
+    "disabled": "none",
+    "default": "none",
+    "safe": "vae_decode",
+    "stable": "vae_decode",
+    "vae": "vae_decode",
+    "vae.decode": "vae_decode",
+    "vae_decoder": "vae_decode",
+    "transformer": "transformer_debug",
+    "full": "full_debug",
+    "all": "full_debug",
+}
+TENSORRT_COMPONENT_ALIASES = {
+    "vae": "vae_decode",
+    "vae.decode": "vae_decode",
+    "vae_decoder": "vae_decode",
+    "diffusion_transformer": "transformer",
+}
+TENSORRT_PROFILE_COMPONENTS = {
+    "none": [],
+    "vae_decode": ["vae_decode"],
+    "transformer_debug": ["transformer"],
+    "full_debug": ["transformer", "vae_decode"],
+}
 
 
 def patch_sdpa_enable_gqa() -> None:
@@ -35,6 +66,24 @@ def patch_sdpa_enable_gqa() -> None:
     torch.nn.functional.scaled_dot_product_attention = wrapped
 
 
+def configure_torch_determinism(seed: int, deterministic: bool) -> None:
+    import torch
+
+    if hasattr(torch, "use_deterministic_algorithms"):
+        try:
+            torch.use_deterministic_algorithms(bool(deterministic), warn_only=True)
+        except TypeError:
+            torch.use_deterministic_algorithms(bool(deterministic))
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = bool(deterministic)
+        torch.backends.cudnn.benchmark = not bool(deterministic)
+    if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "matmul"):
+        torch.backends.cuda.matmul.allow_tf32 = not bool(deterministic)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
 def fit_canvas(path: Path, size: tuple[int, int]) -> Image.Image:
     image = ImageOps.exif_transpose(Image.open(path).convert("RGB"))
     contained = ImageOps.contain(image, size, Image.Resampling.LANCZOS)
@@ -45,7 +94,6 @@ def fit_canvas(path: Path, size: tuple[int, int]) -> Image.Image:
 
 def validate_runtime(model_dir: Path | None, lora_path: Path | None) -> dict[str, Any]:
     import importlib.metadata as metadata
-    import importlib.util
 
     import peft  # noqa: F401
     import torch
@@ -62,6 +110,7 @@ def validate_runtime(model_dir: Path | None, lora_path: Path | None) -> dict[str
         "lora_exists": bool(lora_path and lora_path.is_file()),
         "torchao_available": importlib.util.find_spec("torchao") is not None,
         "bitsandbytes_available": importlib.util.find_spec("bitsandbytes") is not None,
+        "torch_tensorrt_available": importlib.util.find_spec("torch_tensorrt") is not None,
     }
     return payload
 
@@ -120,6 +169,174 @@ def normalize_components(value: Any) -> list[str]:
         parts = [str(item).strip() for item in value]
     components = [item for item in parts if item]
     return components or list(DEFAULT_QUANTIZE_COMPONENTS)
+
+
+def normalize_tensorrt_profile(value: str | None) -> str:
+    mode = (value or "none").strip().lower().replace("-", "_")
+    mode = TENSORRT_PROFILE_ALIASES.get(mode, mode)
+    if mode not in TENSORRT_PROFILE_COMPONENTS:
+        valid = sorted(set(TENSORRT_PROFILE_COMPONENTS) | set(TENSORRT_PROFILE_ALIASES))
+        raise ValueError(f"Unsupported Klein TensorRT profile '{value}'. Expected one of: {', '.join(valid)}.")
+    return mode
+
+
+def normalize_tensorrt_components(profile: str, value: Any) -> list[str]:
+    profile = normalize_tensorrt_profile(profile)
+    if value is None:
+        return list(TENSORRT_PROFILE_COMPONENTS[profile])
+    if isinstance(value, str):
+        parts = [item.strip() for item in value.split(",")]
+    else:
+        parts = [str(item).strip() for item in value]
+    components = [TENSORRT_COMPONENT_ALIASES.get(item, item) for item in parts if item]
+    if not components:
+        return list(TENSORRT_PROFILE_COMPONENTS[profile])
+    allowed = {"vae_decode", "transformer"}
+    invalid = sorted(set(components) - allowed)
+    if invalid:
+        raise ValueError(
+            "Unsupported Klein TensorRT component(s): "
+            + ", ".join(invalid)
+            + f". Expected one of: {', '.join(sorted(allowed))}."
+        )
+    return components
+
+
+def resolve_tensorrt_cache_dir(value: str | Path | None) -> Path:
+    cache_dir = Path(value) if value else DEFAULT_TENSORRT_CACHE_DIR
+    if not cache_dir.is_absolute():
+        cache_dir = PROJECT_ROOT / cache_dir
+    return cache_dir.resolve()
+
+
+def validate_tensorrt_request(
+    profile: str,
+    components: list[str],
+    *,
+    quantization: str,
+    quantize_components: list[str],
+) -> None:
+    if profile == "none" or not components:
+        return
+    if "transformer" in components and quantization != "none" and "transformer" in quantize_components:
+        raise RuntimeError(
+            "Klein TensorRT transformer/full profiles are incompatible with quantized transformer weights. "
+            "Torch-TensorRT fails on the bitsandbytes UInt8 transformer graph. Use "
+            "TRYON_KLEIN_TRT_PROFILE=vae_decode with bnb_4bit, or disable transformer quantization only for "
+            "debug builds that fit in VRAM."
+        )
+
+
+def _safe_tensorrt_options(options: dict[str, Any]) -> dict[str, Any]:
+    safe: dict[str, Any] = {}
+    for key, value in options.items():
+        if key == "enabled_precisions":
+            safe[key] = sorted(str(item) for item in value)
+        else:
+            safe[key] = value
+    return safe
+
+
+def _tensorrt_options(cache_dir: Path, min_block_size: int) -> dict[str, Any]:
+    import torch
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return {
+        "enabled_precisions": {torch.float16},
+        "truncate_double": True,
+        "require_full_compilation": False,
+        "min_block_size": min_block_size,
+        "workspace_size": 0,
+        "use_fast_partitioner": True,
+        "pass_through_build_failures": False,
+        "cache_built_engines": True,
+        "reuse_cached_engines": True,
+        "engine_cache_dir": str(cache_dir),
+        "timing_cache_path": str(cache_dir / "timing_cache.bin"),
+        "runtime_cache_path": str(cache_dir / "runtime_cache.bin"),
+    }
+
+
+def _compile_with_tensorrt(module: Any, name: str, options: dict[str, Any]):
+    import torch
+    import torch_tensorrt  # noqa: F401
+
+    print(
+        f"Compiling Klein {name} with Torch-TensorRT options={_safe_tensorrt_options(options)}",
+        file=sys.stderr,
+        flush=True,
+    )
+    return torch.compile(
+        module,
+        backend="tensorrt",
+        fullgraph=False,
+        dynamic=False,
+        options=options,
+    )
+
+
+def apply_klein_tensorrt_optimization(
+    pipe: Any,
+    *,
+    profile: str,
+    components: list[str] | None = None,
+    quantization: str,
+    quantize_components: list[str],
+    engine_cache_dir: str | Path | None = None,
+    min_block_size: int | None = None,
+) -> dict[str, Any]:
+    import torch
+
+    profile = normalize_tensorrt_profile(profile)
+    components = normalize_tensorrt_components(profile, components)
+    validate_tensorrt_request(
+        profile,
+        components,
+        quantization=normalize_quantization(quantization),
+        quantize_components=normalize_components(quantize_components),
+    )
+    if profile == "none" or not components:
+        metadata = {
+            "tensorrt_profile": "none",
+            "tensorrt_components": [],
+            "tensorrt_compile_setup_seconds": 0.0,
+            "tensorrt_engine_cache_dir": None,
+            "tensorrt_min_block_size": None,
+        }
+        setattr(pipe, "_vton_tensorrt_metadata", metadata)
+        return metadata
+    if not torch.cuda.is_available():
+        raise RuntimeError("Klein TensorRT requires CUDA.")
+    if importlib.util.find_spec("torch_tensorrt") is None:
+        raise RuntimeError("Klein TensorRT requires torch_tensorrt in TRYON_KLEIN_PYTHON.")
+
+    cache_dir = resolve_tensorrt_cache_dir(engine_cache_dir)
+    min_block_size = int(min_block_size or 5)
+    options = _tensorrt_options(cache_dir, min_block_size)
+    started = time.perf_counter()
+    compiled_components: list[str] = []
+
+    if "transformer" in components:
+        if not hasattr(pipe, "transformer"):
+            raise RuntimeError("Klein pipeline does not expose a transformer module for TensorRT.")
+        pipe.transformer = _compile_with_tensorrt(pipe.transformer, "transformer", options)
+        compiled_components.append("transformer")
+    if "vae_decode" in components:
+        if not hasattr(pipe, "vae") or not hasattr(pipe.vae, "decode"):
+            raise RuntimeError("Klein pipeline does not expose vae.decode for TensorRT.")
+        pipe.vae.decode = _compile_with_tensorrt(pipe.vae.decode, "vae.decode", options)
+        compiled_components.append("vae_decode")
+
+    metadata = {
+        "tensorrt_profile": profile,
+        "tensorrt_components": compiled_components,
+        "tensorrt_compile_setup_seconds": round(time.perf_counter() - started, 3),
+        "tensorrt_engine_cache_dir": str(cache_dir),
+        "tensorrt_min_block_size": min_block_size,
+        "tensorrt_options": _safe_tensorrt_options(options),
+    }
+    setattr(pipe, "_vton_tensorrt_metadata", metadata)
+    return metadata
 
 
 def build_quantization_config(mode: str, components: list[str]):
@@ -188,6 +405,10 @@ def load_pipe(
     device_map: str,
     quantization: str,
     quantize_components: list[str],
+    tensorrt_profile: str = "none",
+    tensorrt_components: list[str] | None = None,
+    tensorrt_engine_cache_dir: str | Path | None = None,
+    tensorrt_min_block_size: int | None = None,
 ):
     import torch
     from diffusers import Flux2KleinPipeline
@@ -195,6 +416,14 @@ def load_pipe(
     device_map = normalize_device_map(device_map)
     quantization = normalize_quantization(quantization)
     quantize_components = normalize_components(quantize_components)
+    tensorrt_profile = normalize_tensorrt_profile(tensorrt_profile)
+    tensorrt_components = normalize_tensorrt_components(tensorrt_profile, tensorrt_components)
+    validate_tensorrt_request(
+        tensorrt_profile,
+        tensorrt_components,
+        quantization=quantization,
+        quantize_components=quantize_components,
+    )
     quantization_config = build_quantization_config(quantization, quantize_components)
 
     patch_sdpa_enable_gqa()
@@ -233,6 +462,15 @@ def load_pipe(
     )
     if hasattr(pipe, "set_adapters"):
         pipe.set_adapters(["tryon"], adapter_weights=[float(lora_scale)])
+    apply_klein_tensorrt_optimization(
+        pipe,
+        profile=tensorrt_profile,
+        components=tensorrt_components,
+        quantization=quantization,
+        quantize_components=quantize_components,
+        engine_cache_dir=tensorrt_engine_cache_dir,
+        min_block_size=tensorrt_min_block_size,
+    )
     return pipe
 
 
@@ -245,10 +483,20 @@ def run_request(request_path: Path, output_dir: Path) -> dict[str, Any]:
     width = int(request["width"])
     height = int(request["height"])
     seed = int(request.get("seed") or 0)
+    deterministic = bool(request.get("deterministic", False))
     device_map = normalize_device_map(request.get("device_map"))
     quantization = normalize_quantization(request.get("quantization"))
     quantize_components = normalize_components(request.get("quantize_components"))
+    tensorrt_profile = normalize_tensorrt_profile(request.get("tensorrt_profile"))
+    tensorrt_components = normalize_tensorrt_components(tensorrt_profile, request.get("tensorrt_components"))
+    validate_tensorrt_request(
+        tensorrt_profile,
+        tensorrt_components,
+        quantization=quantization,
+        quantize_components=quantize_components,
+    )
     references = [fit_canvas(Path(path), (width, height)) for path in request["image_paths"]]
+    configure_torch_determinism(seed, deterministic)
 
     started = time.perf_counter()
     pipe = load_pipe(
@@ -258,6 +506,10 @@ def run_request(request_path: Path, output_dir: Path) -> dict[str, Any]:
         device_map=device_map,
         quantization=quantization,
         quantize_components=quantize_components,
+        tensorrt_profile=tensorrt_profile,
+        tensorrt_components=tensorrt_components,
+        tensorrt_engine_cache_dir=request.get("tensorrt_engine_cache_dir"),
+        tensorrt_min_block_size=request.get("tensorrt_min_block_size"),
     )
     generator_device = "cuda" if torch.cuda.is_available() else "cpu"
     generator = torch.Generator(device=generator_device).manual_seed(seed)
@@ -283,12 +535,14 @@ def run_request(request_path: Path, output_dir: Path) -> dict[str, Any]:
         "steps": int(request["steps"]),
         "guidance_scale": float(request["guidance_scale"]),
         "seed": seed,
+        "deterministic": deterministic,
         "model_dir": str(model_dir),
         "lora_path": str(lora_path),
         "lora_scale": float(request.get("lora_scale", 1.0)),
         "device_map": device_map,
         "quantization": quantization,
         "quantize_components": quantize_components,
+        **getattr(pipe, "_vton_tensorrt_metadata", {}),
         "cuda_max_memory_allocated_mb": (
             round(torch.cuda.max_memory_allocated() / 1024 / 1024, 2)
             if torch.cuda.is_available()

@@ -79,13 +79,14 @@ def test_idm_vton_resident_request_building(tmp_path):
     settings.idm_vton.steps = 12
     engine = IDMVTonEngine(settings.idm_vton)
     context = engine.build_dataset(_make_inputs(tmp_path / "job"))
-    request = engine.build_resident_request(context, seed=321)
+    request = engine.build_resident_request(context, seed=321, deterministic=True)
     assert request["data_dir"] == str(context.data_dir)
     assert request["output_dir"] == str(context.output_dir)
     assert request["width"] == 512
     assert request["height"] == 768
     assert request["num_inference_steps"] == 12
     assert request["seed"] == 321
+    assert request["deterministic"] is True
 
 
 def test_idm_vton_innerwear_tags_preserve_model_compatible_item_class():
