@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.core.config import get_settings
-from app.engines.factory import model_statuses
+from app.engines.factory import loaded_engine_state, model_statuses
 from app.schemas.tryon import HealthResponse
 
 
@@ -24,4 +24,9 @@ def _detect_device(configured_device: str) -> str:
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     settings = get_settings()
-    return HealthResponse(status="ok", device=_detect_device(settings.runtime.device), models=model_statuses(settings))
+    return HealthResponse(
+        status="ok",
+        device=_detect_device(settings.runtime.device),
+        models=model_statuses(settings),
+        **loaded_engine_state(settings),
+    )

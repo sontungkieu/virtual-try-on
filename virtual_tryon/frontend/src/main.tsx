@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Loader2, Play, Shuffle, X } from "lucide-react";
-import { cancelTryOnJob, getTryOnJob, prepareTryOnModel, submitTryOn, TryOnApiError } from "./lib/api";
+import { cancelTryOnJob, getHealth, getTryOnJob, prepareTryOnModel, submitTryOn, TryOnApiError } from "./lib/api";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { ResultViewer } from "./components/ResultViewer";
 import { UploadGarment } from "./components/UploadGarment";
@@ -19,6 +19,7 @@ const resolutionPresets = [
 ];
 const JOB_POLL_INTERVAL_MS = 500;
 const JOB_TIMER_INTERVAL_MS = 250;
+const DEFAULT_ENGINE_MODE = "klein_bnb_4bit" as const;
 
 function formatElapsedSeconds(value?: number | null) {
   if (value == null) return null;
@@ -64,6 +65,7 @@ function App() {
   const [jobStartedAtMs, setJobStartedAtMs] = React.useState<number | null>(null);
   const [modelStartedAtMs, setModelStartedAtMs] = React.useState<number | null>(null);
   const [clockNowMs, setClockNowMs] = React.useState(() => Date.now());
+  const [modelBootstrapComplete, setModelBootstrapComplete] = React.useState(false);
   const prepareSeqRef = React.useRef(0);
   const setField = state.setField;
   const resolutionValue = `${state.outputWidth}x${state.outputHeight}`;
@@ -84,8 +86,16 @@ function App() {
   }, [state.loading, state.modelPreparing]);
 
   React.useEffect(() => {
+    void syncLoadedModel();
+  }, []);
+
+  React.useEffect(() => {
+    if (!modelBootstrapComplete) return;
+    const selected = state.engineMode || null;
+    const readyMode = state.modelStatus?.engine_mode ?? null;
+    if (state.modelStatus?.status === "ready" && readyMode === selected) return;
     void prepareSelectedModel(state.engineMode);
-  }, [state.engineMode]);
+  }, [state.engineMode, modelBootstrapComplete]);
 
   function setResolution(value: string) {
     const preset = resolutionPresets.find((item) => `${item.width}x${item.height}` === value);
@@ -101,6 +111,10 @@ function App() {
 
   function setEngineMode(value: typeof state.engineMode) {
     setField("engineMode", value);
+    applyEngineDefaults(value);
+  }
+
+  function applyEngineDefaults(value: typeof state.engineMode) {
     if (!["klein_lora", "klein_bnb_4bit", "idm_klein_hybrid", "idm_klein_hybrid_pro"].includes(value)) return;
     if (value === "idm_klein_hybrid" || value === "idm_klein_hybrid_pro") {
       setField("useRefiner", false);
@@ -110,6 +124,45 @@ function App() {
     if (state.outputWidth === 768 && state.outputHeight === 1024) {
       setField("outputWidth", 512);
       setField("outputHeight", 768);
+    }
+  }
+
+  async function syncLoadedModel() {
+    const startedAt = Date.now();
+    setModelStartedAtMs(startedAt);
+    setClockNowMs(startedAt);
+    setField("modelPreparing", true);
+    setField("modelError", undefined);
+    try {
+      const health = await getHealth();
+      const detectedMode = health.active_engine_mode ?? health.loaded_engine_mode ?? health.default_engine_mode ?? DEFAULT_ENGINE_MODE;
+      setEngineMode(detectedMode);
+      if (health.active_engine_mode || health.loaded_engine_mode) {
+        setField("modelStatus", {
+          status: "ready",
+          engine: health.active_engine ?? health.loaded_engine ?? detectedMode,
+          engine_mode: detectedMode,
+          metadata: health.loaded_model ?? {},
+          message: "Using currently loaded model."
+        });
+      } else {
+        setField("modelStatus", {
+          status: "loading",
+          engine: detectedMode,
+          engine_mode: detectedMode
+        });
+      }
+    } catch (error) {
+      setEngineMode(DEFAULT_ENGINE_MODE);
+      setField("modelStatus", {
+        status: "loading",
+        engine: DEFAULT_ENGINE_MODE,
+        engine_mode: DEFAULT_ENGINE_MODE
+      });
+      setField("modelError", displayError(error));
+    } finally {
+      setField("modelPreparing", false);
+      setModelBootstrapComplete(true);
     }
   }
 

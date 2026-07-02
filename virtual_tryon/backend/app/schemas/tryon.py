@@ -133,6 +133,12 @@ class HealthResponse(BaseModel):
     status: str
     device: str
     models: dict[str, str]
+    active_engine: str | None = None
+    active_engine_mode: str | None = None
+    loaded_engine: str | None = None
+    loaded_engine_mode: str | None = None
+    loaded_model: dict | None = None
+    default_engine_mode: str = "klein_bnb_4bit"
 
 
 class ModelPrepareRequest(BaseModel):

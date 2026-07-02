@@ -31,6 +31,7 @@ Do not write API keys into tracked files or logs.
 - Adult innerwear categories use anatomy-shaped masks instead of outerwear rectangles: `men_underwear` and `women_underwear` read `garment_bottom`; `women_bra` reads `garment_top`.
 - Mask generation rejects edge-touching foreground body boxes, extends upper-body masks lower for shirt hems, and places underwear masks on the lower pelvis rather than the abdomen.
 - `/tryon` accepts per-job `output_width`, `output_height`, `steps`, `seed`, and `deterministic` overrides for fast preview versus reproducible runs. Deterministic mode is best-effort because CUDA/TensorRT kernels may still be non-bit-exact.
+- `/health` reports `active_engine_mode`, `loaded_engine_mode`, and `default_engine_mode`. The web UI uses this on startup to select the already loaded resident model instead of immediately switching models; if none is loaded, it defaults to `klein_bnb_4bit`.
 - `/tryon/model/prepare` preloads the selected `engine_mode` before generation. The web UI disables Generate while this request is loading so model startup is not hidden inside the generation timer.
 - IDM-VTON uses the resident worker when `idm_vton.resident_worker=true`, keeping the model loaded between jobs and falling back to the subprocess runner if configured. `idm_vton.resident_worker_optimization` selects `eager`, `torch_compile`, or `tensorrt`; TensorRT supports `TRYON_TRT_PROFILE=stable` and the tested full block-wise profile `TRYON_TRT_PROFILE=full_safe`.
 - Missing core checkpoints return a clear failed job message.
@@ -44,4 +45,4 @@ Do not write API keys into tracked files or logs.
 - The web backend does not queue ComfyUI by default. ComfyUI JSON workflows are packaged separately for demo/batch reproduction and can call the backend through the custom node.
 - `use_refiner=true` is best-effort: FLUX load/OOM/runtime failures are logged and the job falls back to `core_output.png`.
 - Every completed core job writes `quality_report.json` and `mask_metadata.json`. Refine mask overlays and detailed mask/crop images are written when intermediate saving is enabled.
-- `/health` returns detailed model status strings; benchmark baselines can be unavailable without affecting the default IDM-VTON API. Disabled engines return a lightweight disabled status and do not spawn local worker runtime checks.
+- `/health` returns detailed model status strings plus the currently loaded resident engine mode when one can be detected; benchmark baselines can be unavailable without affecting the default UI mode. Disabled engines return a lightweight disabled status and do not spawn local worker runtime checks.

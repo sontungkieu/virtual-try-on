@@ -347,7 +347,7 @@ def prepare_tryon_model(payload: ModelPrepareRequest) -> ModelPrepareResponse:
     return ModelPrepareResponse(
         status=str(result.get("status") or "ready"),
         engine=str(result.get("engine") or engine_mode or get_settings().pipeline.engine),
-        engine_mode=engine_mode,
+        engine_mode=result.get("engine_mode") or engine_mode,
         runtime_seconds=result.get("runtime_seconds"),
         metadata=result,
         message=result.get("message"),

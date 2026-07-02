@@ -1,4 +1,4 @@
-import type { EngineMode, ModelPrepareResponse, TryOnHistoryResponse, TryOnResult } from "../store/tryonStore";
+import type { EngineMode, HealthResponse, ModelPrepareResponse, TryOnHistoryResponse, TryOnResult } from "../store/tryonStore";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -69,6 +69,14 @@ export async function prepareTryOnModel(engineMode: EngineMode): Promise<ModelPr
   });
   if (!response.ok) {
     return throwApiError(response, "Model prepare request failed");
+  }
+  return response.json();
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+  const response = await fetch(`${API_BASE_URL}/health`);
+  if (!response.ok) {
+    return throwApiError(response, "Health request failed");
   }
   return response.json();
 }

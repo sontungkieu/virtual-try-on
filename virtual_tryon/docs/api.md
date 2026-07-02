@@ -12,11 +12,19 @@ Returns service status, detected device, and model availability.
     "idm_vton": "available",
     "flux_refiner": "unavailable: license/access not accepted or model is private",
     "catvton": "unavailable: catvton.enabled is false"
-  }
+  },
+  "active_engine": "klein_tryon_lora",
+  "active_engine_mode": "klein_bnb_4bit",
+  "loaded_engine": "klein_tryon_lora",
+  "loaded_engine_mode": "klein_bnb_4bit",
+  "loaded_model": {
+    "resident_worker": "running pid=1234"
+  },
+  "default_engine_mode": "klein_bnb_4bit"
 }
 ```
 
-Model status strings may include detailed skip reasons. When the resident IDM-VTON worker is enabled, the `idm_vton` status also includes `resident_worker=not_started`, `running pid=...`, or an exited return code. Disabled optional engines return a lightweight disabled status instead of running local worker dependency checks. IDM-VTON is the default core API engine; CatVTON and Klein LoRA are benchmark or ablation paths unless explicitly selected.
+Model status strings may include detailed skip reasons. When the resident IDM-VTON worker is enabled, the `idm_vton` status also includes `resident_worker=not_started`, `running pid=...`, or an exited return code. The `active_engine_mode` and `loaded_engine_mode` fields are structured hints for the UI: on startup it selects the already loaded resident model if present, otherwise it falls back to `default_engine_mode`, currently `klein_bnb_4bit`. Disabled optional engines return a lightweight disabled status instead of running local worker dependency checks. IDM-VTON remains available as a selectable engine; CatVTON and Klein LoRA are benchmark or ablation paths unless explicitly selected.
 
 ## POST /tryon/model/prepare
 

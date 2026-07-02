@@ -27,6 +27,11 @@ Frontend nằm trong:
 virtual_tryon/frontend
 ```
 
+Khi mở UI, frontend gọi `/health` trước. Nếu backend báo `active_engine_mode`
+hoặc `loaded_engine_mode`, dropdown Engine tự chuyển sang mode đó và nút
+Generate được coi là dùng model đang resident. Nếu backend chưa load model nào,
+UI mặc định chọn `klein_bnb_4bit` rồi mới gọi `/tryon/model/prepare`.
+
 Đây là app React/Vite. Trên RunPod, frontend thường chạy ở port `8080`.
 
 Frontend phụ trách:

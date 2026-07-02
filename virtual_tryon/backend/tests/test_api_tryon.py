@@ -13,6 +13,33 @@ def test_health_returns_ok(client):
     payload = response.json()
     assert payload["status"] == "ok"
     assert "idm_vton" in payload["models"]
+    assert payload["default_engine_mode"] == "klein_bnb_4bit"
+    assert "active_engine_mode" in payload
+
+
+def test_health_reports_loaded_engine_mode(client, monkeypatch):
+    from app.api import routes_health
+
+    monkeypatch.setattr(
+        routes_health,
+        "loaded_engine_state",
+        lambda settings: {
+            "active_engine": "klein_tryon_lora",
+            "active_engine_mode": "klein_bnb_4bit",
+            "loaded_engine": "klein_tryon_lora",
+            "loaded_engine_mode": "klein_bnb_4bit",
+            "loaded_model": {"resident_worker": "running pid=123"},
+            "default_engine_mode": "klein_bnb_4bit",
+        },
+    )
+
+    api = TestClient(client)
+    response = api.get("/health")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["active_engine_mode"] == "klein_bnb_4bit"
+    assert payload["loaded_engine"] == "klein_tryon_lora"
+    assert payload["loaded_model"]["resident_worker"] == "running pid=123"
 
 
 def test_prepare_model_endpoint_uses_selected_engine(client):
@@ -24,6 +51,31 @@ def test_prepare_model_endpoint_uses_selected_engine(client):
     assert payload["engine_mode"] == "idm_vton"
     assert payload["engine"] == "mock"
     assert payload["metadata"]["engine"] == "mock"
+
+
+def test_prepare_model_endpoint_reuses_loaded_engine(client, monkeypatch):
+    from app.services import tryon_pipeline
+
+    monkeypatch.setattr(
+        tryon_pipeline,
+        "loaded_engine_state",
+        lambda settings: {
+            "active_engine": "klein_tryon_lora",
+            "active_engine_mode": "klein_bnb_4bit",
+            "loaded_engine": "klein_tryon_lora",
+            "loaded_engine_mode": "klein_bnb_4bit",
+            "loaded_model": {"resident_worker": "running pid=123", "model": {"quantization": "bnb_4bit"}},
+            "default_engine_mode": "klein_bnb_4bit",
+        },
+    )
+
+    api = TestClient(client)
+    response = api.post("/tryon/model/prepare", json={"engine_mode": "klein_bnb_4bit"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["engine_mode"] == "klein_bnb_4bit"
+    assert payload["metadata"]["cached"] is True
+    assert payload["runtime_seconds"] == 0.0
 
 
 def test_prepare_model_rejects_invalid_engine_mode(client):

@@ -314,6 +314,63 @@ def test_klein_lora_cache_key_includes_tensorrt(tmp_path):
     assert base._local_cache_key() != trt._local_cache_key()
 
 
+def test_klein_worker_cache_reuses_same_model_preset(monkeypatch, tmp_path):
+    from scripts import klein_diffusers_local_worker as worker
+
+    worker._PIPE_CACHE.clear()
+    calls = {"load": 0}
+
+    def fake_load_pipe(*args, **kwargs):
+        calls["load"] += 1
+        return object()
+
+    monkeypatch.setattr(worker, "load_pipe", fake_load_pipe)
+    request = {
+        "model_dir": str(tmp_path / "model"),
+        "lora_path": str(tmp_path / "lora.safetensors"),
+        "lora_scale": 1.0,
+        "device_map": "cuda",
+        "quantization": "bnb_4bit",
+        "quantize_components": ["transformer", "text_encoder"],
+        "tensorrt_profile": "none",
+        "tensorrt_components": [],
+        "tensorrt_engine_cache_dir": None,
+        "tensorrt_min_block_size": None,
+    }
+
+    _, cached_first, _ = worker.load_cached_pipe(request)
+    _, cached_second, _ = worker.load_cached_pipe({**request, "steps": 4, "prompt": "different runtime prompt"})
+
+    assert cached_first is False
+    assert cached_second is True
+    assert calls["load"] == 1
+
+    _, cached_third, _ = worker.load_cached_pipe({**request, "quantization": "none", "quantize_components": []})
+
+    assert cached_third is False
+    assert calls["load"] == 2
+    worker._PIPE_CACHE.clear()
+
+
+def test_active_klein_resident_model_distinguishes_bnb_4bit(monkeypatch):
+    from app.engines import klein_tryon_lora_engine as module
+
+    class FakeClient:
+        def loaded_model(self):
+            return {"quantization": "bnb_4bit", "device_map": "cuda"}
+
+        def status(self):
+            return "running pid=123"
+
+    monkeypatch.setattr(module, "_RESIDENT_CLIENTS", {"fake": FakeClient()})
+
+    state = module.active_klein_resident_model()
+
+    assert state is not None
+    assert state["engine_mode"] == "klein_bnb_4bit"
+    assert state["model"]["quantization"] == "bnb_4bit"
+
+
 def test_klein_tensorrt_guard_rejects_quantized_transformer():
     from scripts.klein_diffusers_local_worker import (
         normalize_tensorrt_components,

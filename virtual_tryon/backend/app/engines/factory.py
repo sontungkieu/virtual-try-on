@@ -6,8 +6,8 @@ from app.engines.catvton_engine import CatVTonEngine
 from app.engines.comfyui_flux_redux_engine import ComfyUIFluxReduxEngine
 from app.engines.flux_refiner_engine import FluxRefinerEngine
 from app.engines.idm_klein_hybrid_engine import IDMKleinHybridEngine
-from app.engines.idm_vton_engine import IDMVTonEngine
-from app.engines.klein_tryon_lora_engine import KleinTryOnLoraEngine
+from app.engines.idm_vton_engine import IDMVTonEngine, active_idm_resident_model
+from app.engines.klein_tryon_lora_engine import KleinTryOnLoraEngine, active_klein_resident_model
 from app.engines.mock_engine import MockRefinerEngine, MockTryOnEngine
 
 
@@ -101,3 +101,36 @@ def model_statuses(settings: Settings) -> dict[str, str]:
         }
     )
     return statuses
+
+
+def loaded_engine_state(settings: Settings) -> dict:
+    klein_state = active_klein_resident_model()
+    if klein_state is not None:
+        return {
+            "active_engine": klein_state["engine"],
+            "active_engine_mode": klein_state["engine_mode"],
+            "loaded_engine": klein_state["engine"],
+            "loaded_engine_mode": klein_state["engine_mode"],
+            "loaded_model": klein_state,
+            "default_engine_mode": "klein_bnb_4bit",
+        }
+
+    idm_state = active_idm_resident_model()
+    if idm_state is not None:
+        return {
+            "active_engine": idm_state["engine"],
+            "active_engine_mode": idm_state["engine_mode"],
+            "loaded_engine": idm_state["engine"],
+            "loaded_engine_mode": idm_state["engine_mode"],
+            "loaded_model": idm_state,
+            "default_engine_mode": "klein_bnb_4bit",
+        }
+
+    return {
+        "active_engine": None,
+        "active_engine_mode": None,
+        "loaded_engine": None,
+        "loaded_engine_mode": None,
+        "loaded_model": None,
+        "default_engine_mode": "klein_bnb_4bit",
+    }

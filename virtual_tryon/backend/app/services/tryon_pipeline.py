@@ -13,7 +13,7 @@ from PIL import Image
 from app.core.config import Settings
 from app.core.paths import REPO_ROOT
 from app.engines.base import TryOnInputs
-from app.engines.factory import create_refiner, create_repair_engine, create_tryon_engine
+from app.engines.factory import create_refiner, create_repair_engine, create_tryon_engine, loaded_engine_state
 from app.evaluation.quality_checks import build_quality_report, run_quality_checks
 from app.preprocessing.agnostic_mask import AgnosticMaskResult, create_agnostic_mask
 from app.preprocessing.densepose import DensePoseEstimator
@@ -207,11 +207,33 @@ class TryOnPipeline:
 
     def preload_engine(self, engine_mode: str | None = None) -> dict:
         settings = self.settings_for_selection(engine_mode)
+        loaded_state = loaded_engine_state(settings)
+        requested_mode = engine_mode or self._engine_mode_for_settings(settings)
+        if requested_mode and loaded_state.get("active_engine_mode") == requested_mode:
+            return {
+                "status": "ready",
+                "engine": loaded_state.get("active_engine") or settings.pipeline.engine,
+                "engine_mode": requested_mode,
+                "runtime_seconds": 0.0,
+                "cached": True,
+                "loaded_model": loaded_state.get("loaded_model"),
+                "message": f"{requested_mode} is already loaded.",
+            }
         engine = create_tryon_engine(settings)
         if hasattr(engine, "preload"):
             return engine.preload()
         engine.prepare()
         return {"status": "ready", "engine": getattr(engine, "name", settings.pipeline.engine)}
+
+    @staticmethod
+    def _engine_mode_for_settings(settings: Settings) -> str | None:
+        if settings.pipeline.engine == "klein_tryon_lora":
+            return "klein_bnb_4bit" if settings.klein_tryon_lora.quantization == "bnb_4bit" else "klein_lora"
+        if settings.pipeline.engine == "idm_vton":
+            return "idm_vton"
+        if settings.pipeline.engine == "catvton":
+            return "catvton"
+        return None
 
     @staticmethod
     def _apply_klein_bnb_4bit_settings(settings: Settings) -> None:

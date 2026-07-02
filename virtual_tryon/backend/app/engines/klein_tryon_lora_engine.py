@@ -43,6 +43,7 @@ class KleinResidentClient:
         self._stdout_queue: queue.Queue[str] = queue.Queue()
         self._stdout_tail: deque[str] = deque(maxlen=200)
         self._stderr_tail: deque[str] = deque(maxlen=400)
+        self._loaded_model: dict[str, Any] | None = None
 
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
@@ -61,11 +62,40 @@ class KleinResidentClient:
     def stderr_tail(self) -> str:
         return "".join(self._stderr_tail)
 
+    def loaded_model(self) -> dict[str, Any] | None:
+        if not self.is_running() or self._loaded_model is None:
+            return None
+        return dict(self._loaded_model)
+
+    @staticmethod
+    def _model_identity(payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+        keys = [
+            "model_dir",
+            "lora_path",
+            "device_map",
+            "quantization",
+            "quantize_components",
+            "tensorrt_profile",
+            "tensorrt_components",
+        ]
+        identity = {key: payload.get(key) for key in keys if key in payload}
+        identity.update(
+            {
+                "cached": result.get("cached") if "cached" in result else result.get("pipe_cached"),
+                "worker_status": result.get("status"),
+                "worker_runtime_seconds": result.get("runtime_seconds"),
+                "load_model_seconds": result.get("load_model_seconds"),
+                "generation_seconds": result.get("generation_seconds"),
+            }
+        )
+        return {key: value for key, value in identity.items() if value is not None}
+
     def start(self) -> None:
         if self.is_running():
             return
         if not self.entrypoint.exists():
             raise ModelUnavailableError(f"Klein resident worker entrypoint not found: {self.entrypoint}")
+        self._loaded_model = None
         self._stdout_queue = queue.Queue()
         self._stdout_tail.clear()
         self._stderr_tail.clear()
@@ -187,6 +217,8 @@ class KleinResidentClient:
                 result = response.get("result")
                 if not isinstance(result, dict):
                     raise EngineExecutionError("Klein resident worker returned an invalid result payload.")
+                if message_type in {"prepare", "run"}:
+                    self._loaded_model = self._model_identity(payload, result)
                 return result
 
     def stop(self) -> None:
@@ -202,6 +234,8 @@ class KleinResidentClient:
         except Exception:
             process.kill()
             process.wait(timeout=5)
+        finally:
+            self._loaded_model = None
 
 
 _RESIDENT_CLIENTS: dict[str, KleinResidentClient] = {}
@@ -221,6 +255,21 @@ def _stop_resident_clients() -> None:
 
 def stop_klein_resident_clients() -> None:
     _stop_resident_clients()
+
+
+def active_klein_resident_model() -> dict[str, Any] | None:
+    with _RESIDENT_CLIENTS_LOCK:
+        for client in _RESIDENT_CLIENTS.values():
+            model = client.loaded_model()
+            if model is not None:
+                mode = "klein_bnb_4bit" if model.get("quantization") == "bnb_4bit" else "klein_lora"
+                return {
+                    "engine": "klein_tryon_lora",
+                    "engine_mode": mode,
+                    "resident_worker": client.status(),
+                    "model": model,
+                }
+    return None
 
 
 def _get_resident_client(config: EngineConfig, python_executable: str) -> KleinResidentClient:

@@ -264,6 +264,19 @@ def stop_resident_clients() -> None:
     _stop_resident_clients()
 
 
+def active_idm_resident_model() -> dict[str, Any] | None:
+    with _RESIDENT_CLIENTS_LOCK:
+        for client in _RESIDENT_CLIENTS.values():
+            if client.is_running():
+                return {
+                    "engine": "idm_vton",
+                    "engine_mode": "idm_vton",
+                    "resident_worker": client.status(),
+                    "optimization": client.config.resident_worker_optimization,
+                }
+    return None
+
+
 def _get_resident_client(config: EngineConfig) -> IDMVTonResidentClient:
     global _RESIDENT_ATEXIT_REGISTERED
     key = _resident_client_key(config)

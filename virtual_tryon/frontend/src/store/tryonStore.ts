@@ -127,6 +127,18 @@ export type ModelPrepareResponse = {
   message?: string | null;
 };
 
+export type HealthResponse = {
+  status: string;
+  device: string;
+  models: Record<string, string>;
+  active_engine?: string | null;
+  active_engine_mode?: EngineMode | null;
+  loaded_engine?: string | null;
+  loaded_engine_mode?: EngineMode | null;
+  loaded_model?: Record<string, unknown> | null;
+  default_engine_mode?: EngineMode | null;
+};
+
 type TryOnState = {
   personImage?: File;
   topImage?: File;
@@ -165,13 +177,13 @@ export const useTryOnStore = create<TryOnState>((set) => ({
   autoPrompt: false,
   testcaseId: "",
   promptVariant: "default",
-  engineMode: "",
+  engineMode: "klein_bnb_4bit",
   useRefiner: false,
   repairMode: true,
   runMode: "async",
-  outputWidth: 768,
-  outputHeight: 1024,
-  steps: 30,
+  outputWidth: 512,
+  outputHeight: 768,
+  steps: 4,
   seedMode: "random",
   seed: 2026070201,
   deterministic: false,
