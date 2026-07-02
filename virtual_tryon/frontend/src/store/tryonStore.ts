@@ -8,7 +8,15 @@ export type Category =
   | "men_underwear"
   | "women_underwear"
   | "women_bra";
-export type EngineMode = "" | "idm_vton" | "idm_vton_flux" | "idm_mask_expanded" | "idm_mask_expanded_flux" | "klein_lora" | "catvton";
+export type EngineMode =
+  | ""
+  | "idm_vton"
+  | "idm_vton_flux"
+  | "idm_mask_expanded"
+  | "idm_mask_expanded_flux"
+  | "flux_redux_catvton"
+  | "klein_lora"
+  | "catvton";
 export type PromptVariant = "default" | "strong_remove_old_garment" | "identity_strict";
 export type StageStatus = "pending" | "running" | "completed" | "skipped" | "failed" | "cancelled";
 

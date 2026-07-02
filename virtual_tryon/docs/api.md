@@ -11,12 +11,13 @@ Returns service status, detected device, and model availability.
   "models": {
     "idm_vton": "available",
     "flux_refiner": "unavailable: license/access not accepted or model is private",
+    "comfyui_flux_redux": "available",
     "catvton": "unavailable: catvton.enabled is false"
   }
 }
 ```
 
-Model status strings may include detailed skip reasons. When the resident IDM-VTON worker is enabled, the `idm_vton` status also includes `resident_worker=not_started`, `running pid=...`, or an exited return code. Disabled optional engines return a lightweight disabled status instead of running local worker dependency checks. IDM-VTON is the default core API engine; CatVTON and Klein LoRA are benchmark baselines unless explicitly configured.
+Model status strings may include detailed skip reasons. When the resident IDM-VTON worker is enabled, the `idm_vton` status also includes `resident_worker=not_started`, `running pid=...`, or an exited return code. Disabled optional engines return a lightweight disabled status instead of running local worker dependency checks. IDM-VTON is the default core API engine; CatVTON, Klein LoRA, and the ComfyUI Flux Redux bridge are benchmark or ablation paths unless explicitly selected.
 
 ## POST /tryon
 
@@ -31,7 +32,7 @@ Multipart form fields:
 - `use_refiner`: boolean, default `true`.
 - `repair_mode`: boolean, default `true`.
 - `run_mode`: optional `sync` or `async`; defaults to `configs/pipeline.yaml`.
-- `engine_mode`: optional `idm_vton`, `idm_mask_expanded`, `idm_vton_flux`, `idm_mask_expanded_flux`, `klein_lora`, or `catvton`; default is the configured core engine.
+- `engine_mode`: optional `idm_vton`, `idm_mask_expanded`, `idm_vton_flux`, `idm_mask_expanded_flux`, `flux_redux_catvton`, `klein_lora`, or `catvton`; default is the configured core engine.
 - `auto_prompt`: optional boolean, default `false`.
 - `testcase_id`: optional `tc1` through `tc15`; required when `auto_prompt=true`.
 - `prompt_variant`: optional `default`, `strong_remove_old_garment`, or `identity_strict`.
@@ -100,6 +101,7 @@ Prompt behavior:
 - `auto_prompt=true` builds an engine-specific prompt from testcase metadata.
 - `engine_mode=klein_lora` normalizes the prompt so it starts with `TRYON`.
 - `engine_mode=idm_vton_flux` or `idm_mask_expanded_flux` can save both core and refine prompts.
+- `engine_mode=flux_redux_catvton` uses the local ComfyUI Flux Fill + Redux + CatVTON graph as the core generator and marks the backend FLUX refiner stage as skipped.
 - Prompt artifacts are served through the same `/artifacts` route as images and reports.
 
 Generation overrides:
@@ -123,9 +125,11 @@ Generation reproducibility is controlled with form fields `seed` and
 in the job response. If `deterministic=true`, the backend and resident/local
 workers enable deterministic PyTorch settings on a best-effort basis; CUDA,
 TensorRT, and some attention kernels may still prevent exact bit-for-bit output.
-The web API is not a ComfyUI queue path. It runs the configured Python
-engines/workers directly; packaged ComfyUI workflows are separate demo/batch
-artifacts.
+The web API normally runs Python engines/workers directly. The explicit
+`engine_mode=flux_redux_catvton` exception queues the local ComfyUI server on
+port `8188` with the backend-generated dynamic mask and saves the ComfyUI
+workflow/history artifacts into the same job output folder. Packaged ComfyUI
+workflow files remain available for separate demo/batch reproduction.
 
 Core model output is mask-composited before it becomes the final image. The
 backend saves `core_output_raw.png` for inspection, then pastes only the
@@ -135,6 +139,14 @@ especially important for global engines such as Klein LoRA, which do not accept
 a hard inpaint mask internally.
 
 `engine_mode=klein_lora` is experimental. It opts into the Klein Try-On LoRA adapter for that request only, requires a top garment, and uses the configured bottom-reference strategy when no bottom garment is uploaded. The default backend is local Diffusers and requires `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and the `klein-local` dependency set. The engine stops the resident IDM worker before loading Klein so VRAM is released at model switch time. If local model files, dependencies, or model access are missing, the job returns `status: failed` with `error_code: ENGINE_UNAVAILABLE` and no raw stack trace. Local placement is controlled by `TRYON_KLEIN_DEVICE_MAP`; default `cpu_offload` is safest, while `cuda` attempts to place the full pipe on GPU. On 24 GB GPUs, use `TRYON_KLEIN_DEVICE_MAP=cuda` with `TRYON_KLEIN_QUANTIZATION=bnb_4bit` and `TRYON_KLEIN_QUANTIZE_COMPONENTS=transformer,text_encoder` for the tested all-GPU mode. Optional Klein TensorRT uses `TRYON_KLEIN_TRT_PROFILE=vae_decode` and records TensorRT metadata in artifacts; transformer/full TensorRT profiles are debug-only and reject bnb-quantized transformer weights. `TRYON_KLEIN_BACKEND=fal_api` keeps the old fal.ai path and requires `FAL_KEY`.
+
+`engine_mode=flux_redux_catvton` is experimental. It requires ComfyUI to be
+running and reachable through `TRYON_COMFYUI_URL` or the default
+`http://127.0.0.1:8188`, with Flux Fill FP8, Redux, SigCLIP, CLIP/T5, VAE, and
+CatVTON LoRA files installed under `/workspace/ComfyUI/models`. It writes
+`comfyui_flux_redux_workflow.json`, `comfyui_flux_redux_history.json`, and
+`comfyui_flux_redux_output.png` for inspection, then mask-composites the raw
+ComfyUI output into `core_output.png` and `result.png`.
 
 If `use_refiner=true` and the FLUX refiner is missing, incompatible, or runs out of memory, the job still returns `status: completed` with `result_url` pointing to the IDM-VTON core output. The output folder includes `flux_refiner_error.txt` and `quality_report.json` explaining the fallback. Raw stack traces are not returned in the API response. Repair runs only after a refined output is created and accepted by the quality gate.
 

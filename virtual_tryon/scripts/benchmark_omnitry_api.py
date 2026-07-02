@@ -34,6 +34,9 @@ CSV_COLUMNS = [
     "case_id",
     "gender",
     "category",
+    "person_path",
+    "garment_path",
+    "target_path",
     "flow",
     "engine_mode",
     "steps",
@@ -73,6 +76,7 @@ class OmniTryCase:
     person_path: Path
     garment_path: Path
     garment_field: str
+    target_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +127,16 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             writer.writerow({column: row.get(column) for column in CSV_COLUMNS})
 
 
+def _image_files(directory: Path) -> list[Path]:
+    if not directory.exists():
+        return []
+    return sorted(
+        path
+        for path in directory.glob("*")
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+    )
+
+
 def discover_cases(dataset_root: Path) -> list[OmniTryCase]:
     input_models = dataset_root / "input_models"
     female_model = input_models / "female_model.jpg"
@@ -134,10 +148,8 @@ def discover_cases(dataset_root: Path) -> list[OmniTryCase]:
         raise SystemExit(f"Missing OmniTry model image(s): {', '.join(path.as_posix() for path in missing)}")
 
     cases: list[OmniTryCase] = []
-    female_dir = dataset_root / "female_undergarmentt"
-    for garment_path in sorted(female_dir.glob("*")):
-        if garment_path.suffix.lower() not in IMAGE_EXTENSIONS:
-            continue
+    female_dir = dataset_root / "input_undergarment" / "female"
+    for garment_path in _image_files(female_dir):
         case_id = f"female_{_safe_name(garment_path.stem)}"
         cases.append(
             OmniTryCase(
@@ -150,29 +162,44 @@ def discover_cases(dataset_root: Path) -> list[OmniTryCase]:
             )
         )
 
-    male_dir = dataset_root / "male_undergarment"
-    male_model_1_numbers = {3, 4, 8, 9}
-    for garment_path in sorted(male_dir.glob("*")):
-        if garment_path.suffix.lower() not in IMAGE_EXTENSIONS:
-            continue
-        match = re.search(r"(\d+)$", garment_path.stem)
-        number = int(match.group(1)) if match else None
-        person_path = male_model_1 if number in male_model_1_numbers else male_model_2
-        model_id = "m1" if person_path == male_model_1 else "m2"
-        case_id = f"male_{model_id}_{_safe_name(garment_path.stem)}"
-        cases.append(
-            OmniTryCase(
-                case_id=case_id,
-                gender="male",
-                category="men_underwear",
-                person_path=person_path,
-                garment_path=garment_path,
-                garment_field="garment_bottom",
+    male_dir = dataset_root / "input_undergarment" / "male"
+    for model_id, person_path in (("m1", male_model_1), ("m2", male_model_2)):
+        for garment_path in _image_files(male_dir):
+            case_id = f"male_{model_id}_{_safe_name(garment_path.stem)}"
+            cases.append(
+                OmniTryCase(
+                    case_id=case_id,
+                    gender="male",
+                    category="men_underwear",
+                    person_path=person_path,
+                    garment_path=garment_path,
+                    garment_field="garment_bottom",
+                )
             )
-        )
+
+    for bra_dir in (
+        dataset_root / "input_undergarment" / "bra",
+        dataset_root / "input_bra",
+    ):
+        for garment_path in _image_files(bra_dir):
+            case_id = f"female_bra_{_safe_name(garment_path.stem)}"
+            cases.append(
+                OmniTryCase(
+                    case_id=case_id,
+                    gender="female",
+                    category="women_bra",
+                    person_path=female_model,
+                    garment_path=garment_path,
+                    garment_field="garment_top",
+                )
+            )
 
     if not cases:
-        raise SystemExit(f"No OmniTry garment images found under {dataset_root}")
+        raise SystemExit(
+            "No OmniTry product garment images found. Expected images under "
+            f"{(dataset_root / 'input_undergarment').as_posix()}; refusing to use "
+            "target/output folders such as female_undergarmentt or male_undergarment as inputs."
+        )
     return cases
 
 
@@ -725,6 +752,8 @@ def write_case_sheets(
             _sheet_cell(case.person_path, "person", case.person_path.name, cell_size, image_size),
             _sheet_cell(case.garment_path, "garment", case.garment_path.name, cell_size, image_size),
         ]
+        if case.target_path is not None:
+            cells.append(_sheet_cell(case.target_path, "target (not input)", case.target_path.name, cell_size, image_size))
         case_rows = sorted(
             rows_by_case.get(case.case_id, []),
             key=lambda row: (int(row.get("round", 0)), str(row.get("flow", "")), str(row.get("row_id", ""))),
@@ -802,6 +831,9 @@ def _run_one(
         "case_id": case.case_id,
         "gender": case.gender,
         "category": category,
+        "person_path": case.person_path.as_posix(),
+        "garment_path": case.garment_path.as_posix(),
+        "target_path": case.target_path.as_posix() if case.target_path else "",
         "flow": flow.label,
         "engine_mode": flow.engine_mode,
         "steps": flow.steps,
@@ -981,7 +1013,13 @@ def main() -> None:
         flush=True,
     )
     for index, (round_index, case, flow) in enumerate(tasks, start=1):
-        print(f"schedule[{index}] r{round_index} {case.case_id} {flow.label}", flush=True)
+        print(
+            f"schedule[{index}] r{round_index} {case.case_id} {flow.label} "
+            f"person={_relative(case.person_path, args.dataset_root)} "
+            f"garment={_relative(case.garment_path, args.dataset_root)} "
+            f"field={case.garment_field}",
+            flush=True,
+        )
 
     if args.dry_run:
         return

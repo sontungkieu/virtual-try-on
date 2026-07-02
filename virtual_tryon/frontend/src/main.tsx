@@ -54,6 +54,15 @@ function App() {
 
   function setEngineMode(value: typeof state.engineMode) {
     setField("engineMode", value);
+    if (value === "flux_redux_catvton") {
+      setField("useRefiner", false);
+      if (state.steps > 16) setField("steps", 8);
+      if (state.outputWidth === 768 && state.outputHeight === 1024) {
+        setField("outputWidth", 512);
+        setField("outputHeight", 768);
+      }
+      return;
+    }
     if (value !== "klein_lora") return;
     if (state.steps >= 28) setField("steps", 4);
     if (state.outputWidth === 768 && state.outputHeight === 1024) {
@@ -212,6 +221,7 @@ function App() {
               <option value="idm_mask_expanded">IDM-VTON expanded mask</option>
               <option value="idm_vton_flux">IDM-VTON + FLUX</option>
               <option value="idm_mask_expanded_flux">Expanded mask + FLUX</option>
+              <option value="flux_redux_catvton">Flux Fill + Redux + CatVTON</option>
               <option value="klein_lora">Klein LoRA experimental</option>
               <option value="catvton">CatVTON baseline</option>
             </select>

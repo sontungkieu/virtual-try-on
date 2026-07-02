@@ -107,11 +107,22 @@ class FluxRefinerEngine:
             )
 
         try:
-            self._pipe = pipeline_cls.from_pretrained(model_id, torch_dtype=dtype)
-            if torch.cuda.is_available():
-                self._pipe = self._pipe.to("cuda")
+            token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN") or os.getenv("HF_HUB_TOKEN")
+            kwargs: dict[str, Any] = {"torch_dtype": dtype}
+            if token:
+                kwargs["token"] = token
+            self._pipe = pipeline_cls.from_pretrained(model_id, **kwargs)
             if hasattr(self._pipe, "enable_attention_slicing"):
                 self._pipe.enable_attention_slicing()
+            if hasattr(self._pipe, "enable_vae_slicing"):
+                self._pipe.enable_vae_slicing()
+            if hasattr(self._pipe, "enable_vae_tiling"):
+                self._pipe.enable_vae_tiling()
+            if torch.cuda.is_available():
+                if self.config.device_map == "cpu_offload" and hasattr(self._pipe, "enable_model_cpu_offload"):
+                    self._pipe.enable_model_cpu_offload()
+                else:
+                    self._pipe = self._pipe.to("cuda")
         except Exception as exc:
             self._pipe = None
             message = self._classify_load_error(exc)

@@ -31,6 +31,30 @@ It also copies importable UI workflows into:
 
 The launch script starts ComfyUI on port `8188`.
 
+## FLUX Fill + Redux Models
+
+After Hugging Face access is approved for the FLUX repositories, source the RunPod secret env and download the ComfyUI models into `/workspace/ComfyUI` with the Hugging Face token active. Do not print token values in logs.
+
+The current local FLUX/Redux in-context workflow uses these files:
+
+```text
+/workspace/ComfyUI/models/unet/FLUX1/fluxFillFP8_v10.safetensors
+/workspace/ComfyUI/models/style_models/flux1-redux-dev.safetensors
+/workspace/ComfyUI/models/clip/clip_l.safetensors
+/workspace/ComfyUI/models/clip/t5xxl_fp8_e4m3fn.safetensors
+/workspace/ComfyUI/models/clip_vision/sigclip_vision_patch14_384.safetensors
+/workspace/ComfyUI/models/vae/FLUX1/ae.safetensors
+/workspace/ComfyUI/models/loras/flux/catvton-flux-lora.safetensors
+```
+
+`INSTALL_COMFY_DEPS=0 bash scripts/setup_runpod_comfyui_phase2.sh` can be used after the venv already exists to refresh links/workflows without reinstalling dependencies.
+
+FLUX/Redux smoke outputs are saved under:
+
+```text
+/workspace/ComfyUI/output/vton_flux_redux_smoke/
+```
+
 ## Access From Local Machine
 
 If RunPod does not expose port `8188` in the HTTP services list, use SSH tunneling:
@@ -54,6 +78,7 @@ VTON Phase2 - IDM / IDM Expanded
 VTON Phase2 - SCHP/SAM Mask
 VTON Phase2 - Klein Reference Set
 VTON Phase2 - Klein Local Sampler
+Add Mask For IC Lora
 ```
 
 ## Three Klein Direction Workflows

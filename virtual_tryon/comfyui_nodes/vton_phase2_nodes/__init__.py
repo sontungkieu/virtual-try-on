@@ -850,6 +850,55 @@ class VTONPhase2KleinSampler:
                 pass
 
 
+class AddMaskForICLora:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "first_image": ("IMAGE",),
+                "second_image": ("IMAGE",),
+                "second_mask": ("MASK",),
+                "patch_mode": (["auto", "horizontal", "vertical"], {"default": "auto"}),
+                "output_length": ("INT", {"default": 1536, "min": 256, "max": 4096, "step": 8}),
+                "patch_color": ("STRING", {"default": "#FF0000"}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK", "INT", "INT", "INT", "INT")
+    RETURN_NAMES = ("image", "mask", "x", "y", "width", "height")
+    FUNCTION = "run"
+    CATEGORY = "VTON Phase2/Compat"
+
+    def run(self, first_image, second_image, second_mask, patch_mode: str, output_length: int, patch_color: str):
+        first = _fit_canvas(_tensor_to_pil(first_image), _tensor_to_pil(second_image).size)
+        second = _tensor_to_pil(second_image)
+        mask = _tensor_to_mask_pil(second_mask).resize(second.size, Image.Resampling.NEAREST)
+
+        if patch_mode == "vertical":
+            canvas = Image.new("RGB", (second.width, first.height + second.height), "white")
+            canvas.paste(first, (0, 0))
+            canvas.paste(second, (0, first.height))
+            packed_mask = Image.new("L", canvas.size, 0)
+            packed_mask.paste(mask, (0, first.height))
+            crop = (0, first.height, second.width, second.height)
+        else:
+            canvas = Image.new("RGB", (first.width + second.width, second.height), "white")
+            canvas.paste(first, (0, 0))
+            canvas.paste(second, (first.width, 0))
+            packed_mask = Image.new("L", canvas.size, 0)
+            packed_mask.paste(mask, (first.width, 0))
+            crop = (first.width, 0, second.width, second.height)
+
+        return (
+            _pil_to_tensor(canvas),
+            _pil_mask_to_tensor(packed_mask),
+            int(crop[0]),
+            int(crop[1]),
+            int(crop[2]),
+            int(crop[3]),
+        )
+
+
 class VTONPhase2MaskComposite:
     @classmethod
     def INPUT_TYPES(cls):
@@ -1735,6 +1784,7 @@ NODE_CLASS_MAPPINGS = {
     "VTONPhase2KleinSamplerDetailed": VTONPhase2KleinSamplerDetailed,
     "VTONPhase2KleinReferenceSet": VTONPhase2KleinReferenceSet,
     "VTONPhase2KleinSampler": VTONPhase2KleinSampler,
+    "AddMaskForICLora": AddMaskForICLora,
     "VTONPhase2MaskComposite": VTONPhase2MaskComposite,
     "VTONPhase2LocalSeamRepair": VTONPhase2LocalSeamRepair,
     "VTONPhase2MaskPreviewImage": VTONPhase2MaskPreviewImage,
@@ -1758,6 +1808,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "VTONPhase2KleinSamplerDetailed": "VTON Phase2 - Klein Detailed Sampler",
     "VTONPhase2KleinReferenceSet": "VTON Phase2 - Klein Reference Set",
     "VTONPhase2KleinSampler": "VTON Phase2 - Klein Local Sampler",
+    "AddMaskForICLora": "Add Mask For IC Lora",
     "VTONPhase2MaskComposite": "VTON Phase2 - Masked Candidate Composite",
     "VTONPhase2LocalSeamRepair": "VTON Phase2 - Local Seam Repair",
     "VTONPhase2MaskPreviewImage": "VTON Phase2 - Mask Preview Image",

@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.core.config import Settings
 from app.engines.adetailer_repair_engine import ADetailerRepairEngine
 from app.engines.catvton_engine import CatVTonEngine
+from app.engines.comfyui_flux_redux_engine import ComfyUIFluxReduxEngine
 from app.engines.flux_refiner_engine import FluxRefinerEngine
 from app.engines.idm_vton_engine import IDMVTonEngine
 from app.engines.klein_tryon_lora_engine import KleinTryOnLoraEngine
@@ -19,6 +20,8 @@ def create_tryon_engine(settings: Settings):
         return CatVTonEngine(settings.catvton)
     if engine_name == "klein_tryon_lora":
         return KleinTryOnLoraEngine(settings.klein_tryon_lora)
+    if engine_name == "comfyui_flux_redux":
+        return ComfyUIFluxReduxEngine(settings)
     raise ValueError(f"Unknown try-on engine: {engine_name}")
 
 
@@ -36,6 +39,7 @@ def model_statuses(settings: Settings) -> dict[str, str]:
     idm_engine = IDMVTonEngine(settings.idm_vton)
     engines = {
         "flux_refiner": FluxRefinerEngine(settings.flux_refiner),
+        "comfyui_flux_redux": ComfyUIFluxReduxEngine(settings),
         "catvton": CatVTonEngine(settings.catvton),
         "klein_tryon_lora": KleinTryOnLoraEngine(settings.klein_tryon_lora),
         "repair": ADetailerRepairEngine(settings.repair),

@@ -16,6 +16,7 @@ These nodes expose the Phase 2 Virtual Try-On experiment methods inside ComfyUI.
 | `VTON Phase2 - Load Klein Try-On LoRA` | Applies `fal/flux-klein-9b-virtual-tryon-lora` to the loaded Klein pipeline. |
 | `VTON Phase2 - Klein Detailed Sampler` | Runs sampling from explicit person/top/bottom references and prompt. |
 | `VTON Phase2 - SCHP/SAM Mask` | Runs the IDM-VTON ATR/SCHP-style human parser inside ComfyUI, optionally refines the target mask with SAM, then outputs raw mask, processed mask, and overlay. |
+| `Add Mask For IC Lora` | Compatibility node for Flux Fill + Redux + CatVTON LoRA in-context workflows; packs garment and person images with the target mask on the person panel. |
 
 ## Method Mapping
 
@@ -49,4 +50,16 @@ The SCHP/SAM node expects these local files on RunPod:
 /workspace/Project_Phase2/virtual_tryon/models/idm_vton/ckpt/humanparsing/parsing_atr.onnx
 /workspace/Project_Phase2/virtual_tryon/models/idm_vton/ckpt/humanparsing/parsing_lip.onnx
 /workspace/Project_Phase2/virtual_tryon/models/sam/sam_vit_b_01ec64.pth
+```
+
+The Flux Fill + Redux in-context workflow additionally expects these local ComfyUI models:
+
+```bash
+/workspace/ComfyUI/models/unet/FLUX1/fluxFillFP8_v10.safetensors
+/workspace/ComfyUI/models/style_models/flux1-redux-dev.safetensors
+/workspace/ComfyUI/models/clip/clip_l.safetensors
+/workspace/ComfyUI/models/clip/t5xxl_fp8_e4m3fn.safetensors
+/workspace/ComfyUI/models/clip_vision/sigclip_vision_patch14_384.safetensors
+/workspace/ComfyUI/models/vae/FLUX1/ae.safetensors
+/workspace/ComfyUI/models/loras/flux/catvton-flux-lora.safetensors
 ```

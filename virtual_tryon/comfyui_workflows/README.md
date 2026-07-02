@@ -58,3 +58,13 @@ Each case gets:
 ```
 
 The API workflow calls the local FastAPI backend from ComfyUI, then saves the generated try-on result and backend mask preview with fixed seed, resolution, steps, category, and prompt. The UI workflow can be opened in ComfyUI for manual reproduction and inspection without loading the IDM model inside the ComfyUI process.
+
+## FLUX Fill + Redux In-Context Workflow
+
+The SCHP/SAM + Flux Fill + Redux/CatVTON workflow uses the `Add Mask For IC Lora` compatibility node from `vton_phase2_nodes`. It packs the garment reference and person image into one in-context canvas while keeping the inpaint mask on the person panel, then feeds the result to Flux Fill with Redux and the CatVTON LoRA.
+
+RunPod smoke outputs for this path are saved under:
+
+```text
+/workspace/ComfyUI/output/vton_flux_redux_smoke/
+```

@@ -166,6 +166,8 @@ class TryOnPipeline:
             mode_settings.mask_experiments.upper_body_expand_hem.enabled = True
             mode_settings.flux_refiner.enabled = True
             mode_settings.refinement.enabled = True
+        elif mode == "flux_redux_catvton":
+            mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "comfyui_flux_redux"
         elif mode == "klein_lora":
             mode_settings.pipeline.engine = "klein_tryon_lora"
             mode_settings.klein_tryon_lora.enabled = True
@@ -182,6 +184,7 @@ class TryOnPipeline:
             "idm_mask_expanded": EngineMode.IDM_MASK_EXPANDED,
             "idm_vton_flux": EngineMode.IDM_MASK_EXPANDED_FLUX,
             "idm_mask_expanded_flux": EngineMode.IDM_MASK_EXPANDED_FLUX,
+            "flux_redux_catvton": EngineMode.IDM_MASK_EXPANDED_FLUX,
             "klein_lora": EngineMode.KLEIN_LORA,
             "catvton": EngineMode.CATVTON,
         }
@@ -632,6 +635,8 @@ class TryOnPipeline:
                 "garment_top_path": job_dir / "garment_top.png" if garment_top is not None else None,
                 "garment_bottom_path": job_dir / "garment_bottom.png" if garment_bottom is not None else None,
                 "garment_dress_path": job_dir / "garment_dress.png" if garment_dress is not None else None,
+                "garment_engine_image": engine_garment,
+                "job_id": request.job_id,
                 "mask_path": job_dir / "agnostic_mask.png",
                 "human_parse": human_parse.warning,
                 "densepose": densepose.warning,
@@ -678,11 +683,12 @@ class TryOnPipeline:
         engine_status = {
             "idm_vton": "success" if core_engine_name in {"idm_vton", "mock"} else "skipped",
             "flux_refiner": "skipped",
+            "comfyui_flux_redux": "success" if core_engine_name == "comfyui_flux_redux" else "skipped",
             "catvton": "success" if core_engine_name == "catvton" else "skipped",
             "klein_lora": "success" if core_engine_name == "klein_tryon_lora" else "skipped",
         }
         refiner_status = "skipped"
-        use_refiner = request.use_refiner or request.engine_mode in {
+        use_refiner = False if request.engine_mode == "flux_redux_catvton" else request.use_refiner or request.engine_mode in {
             "idm_vton_flux",
             "idm_mask_expanded_flux",
         }
@@ -750,7 +756,7 @@ class TryOnPipeline:
         mask_metadata_path = self.storage.save_json(request.job_id, "mask_metadata.json", mask_metadata)
         active_engine_settings = (
             settings.idm_vton
-            if settings.pipeline.engine in {"idm_vton", "mock"}
+            if settings.pipeline.engine in {"idm_vton", "mock", "comfyui_flux_redux"}
             else getattr(settings, settings.pipeline.engine)
         )
         engine_config = {

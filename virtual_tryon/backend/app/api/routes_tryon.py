@@ -222,6 +222,7 @@ async def create_tryon(
         "idm_mask_expanded",
         "idm_vton_flux",
         "idm_mask_expanded_flux",
+        "flux_redux_catvton",
         "klein_lora",
         "catvton",
     }
