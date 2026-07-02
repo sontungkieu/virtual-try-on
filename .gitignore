@@ -24,6 +24,10 @@ MANIFEST
 *.manifest
 *.spec
 
+# Frontend source helpers are not Python build products.
+!virtual_tryon/frontend/src/lib/
+!virtual_tryon/frontend/src/lib/category.ts
+
 # Test, type-checker, and tool caches
 htmlcov/
 .tox/

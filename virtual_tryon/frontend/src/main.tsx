@@ -7,6 +7,7 @@ import { ResultViewer } from "./components/ResultViewer";
 import { UploadGarment } from "./components/UploadGarment";
 import { UploadPerson } from "./components/UploadPerson";
 import { useWorkbenchMotion } from "./hooks/useWorkbenchMotion";
+import { garmentSlotsForCategory } from "./lib/category";
 import { useTryOnStore } from "./store/tryonStore";
 import "./styles.css";
 
@@ -93,10 +94,17 @@ function App() {
     try {
       if (!state.personImage) throw new Error("Person image is required.");
       const form = new FormData();
+      const garmentSlots = new Set(garmentSlotsForCategory(state.category));
+      const hasVisibleGarment =
+        (garmentSlots.has("top") && Boolean(state.topImage)) ||
+        (garmentSlots.has("bottom") && Boolean(state.bottomImage)) ||
+        (garmentSlots.has("dress") && Boolean(state.dressImage));
+      if (!hasVisibleGarment) throw new Error("Garment image is required for the selected category.");
+
       form.append("person_image", state.personImage);
-      if (state.topImage) form.append("garment_top", state.topImage);
-      if (state.bottomImage) form.append("garment_bottom", state.bottomImage);
-      if (state.dressImage) form.append("garment_dress", state.dressImage);
+      if (garmentSlots.has("top") && state.topImage) form.append("garment_top", state.topImage);
+      if (garmentSlots.has("bottom") && state.bottomImage) form.append("garment_bottom", state.bottomImage);
+      if (garmentSlots.has("dress") && state.dressImage) form.append("garment_dress", state.dressImage);
       form.append("category", state.category);
       form.append("prompt", state.prompt);
       form.append("use_refiner", String(state.useRefiner));

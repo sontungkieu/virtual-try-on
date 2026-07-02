@@ -156,7 +156,7 @@ export const useTryOnStore = create<TryOnState>((set) => ({
   seedMode: "random",
   seed: 2026070201,
   deterministic: false,
-  showDebug: false,
+  showDebug: true,
   loading: false,
   setField: (key, value) => set({ [key]: value } as Partial<TryOnState>),
   resetResult: () => set({ result: undefined, error: undefined, jobId: undefined })

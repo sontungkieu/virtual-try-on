@@ -56,6 +56,30 @@ function stageMeta(stage: PipelineStage) {
   return formatRuntime(stage.runtime_seconds) ?? "Done";
 }
 
+function maskLabel(url: string, index: number) {
+  const fileName = url.split("?")[0].split("/").pop() ?? "";
+  const labels: Record<string, string> = {
+    "mask_preview.png": "Mask preview",
+    "garment_refine_mask_overlay.png": "Garment refine",
+    "boundary_refine_mask_overlay.png": "Boundary refine",
+    "safe_refine_mask_overlay.png": "Safe refine",
+    "mask_innerwear_shape.png": "Innerwear shape",
+    "mask_body_silhouette.png": "Body silhouette"
+  };
+  return labels[fileName] ?? `Mask ${index + 1}`;
+}
+
+function collectMaskPreviews(result: TryOnResult) {
+  const urls = [result.debug?.mask_url, ...(result.debug?.mask_urls ?? [])].filter((url): url is string => Boolean(url));
+  const seen = new Set<string>();
+  return urls.reduce<{ label: string; url: string }[]>((items, url) => {
+    if (seen.has(url)) return items;
+    seen.add(url);
+    items.push({ label: maskLabel(url, items.length), url });
+    return items;
+  }, []);
+}
+
 export function ResultViewer() {
   const result = useTryOnStore((state) => state.result);
   const showDebug = useTryOnStore((state) => state.showDebug);
@@ -95,6 +119,7 @@ export function ResultViewer() {
   const garmentRegionDelta = qualityReport?.garment_region_delta ?? qualityReport?.metrics?.garment_region_delta;
   const jobId = result.job_id;
   const artifacts = result.artifact_manifest?.files ?? [];
+  const maskPreviews = collectMaskPreviews(result);
   const debugLinks: [string, string | null | undefined][] = [
     ["quality_report.json", result.debug?.quality_report_url],
     ["mask_metadata.json", result.debug?.mask_metadata_url],
@@ -147,6 +172,26 @@ export function ResultViewer() {
 
       {result.error && <div className="error-box">{result.error}</div>}
       {resultUrl && <img className="result-image" src={resultUrl} alt="Try-on result" data-testid="tryon-result" />}
+
+      {maskPreviews.length ? (
+        <section className="mask-previews" aria-label="Mask previews">
+          <div className="section-heading">
+            <strong>Mask previews</strong>
+            <small>{maskPreviews.length} images</small>
+          </div>
+          <div className="mask-grid">
+            {maskPreviews.map((item) => {
+              const resolved = resolveAssetUrl(item.url);
+              return resolved ? (
+                <figure key={item.url}>
+                  <img src={resolved} alt={item.label} />
+                  <figcaption>{item.label}</figcaption>
+                </figure>
+              ) : null;
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {qualityReport && (
         <section className="quality-summary" aria-label="Quality report">

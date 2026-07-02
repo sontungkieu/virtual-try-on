@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 import { getTryOnHistory, getTryOnJob, resolveAssetUrl } from "../lib/api";
 import { TryOnHistoryItem, useTryOnStore } from "../store/tryonStore";
 
+type GenderFilter = "all" | "man" | "woman";
+const HISTORY_LIMIT = 100;
+
 function formatTime(value?: string | null) {
   if (!value) return "pending";
   return new Intl.DateTimeFormat(undefined, {
@@ -53,17 +56,48 @@ function inputImages(item: TryOnHistoryItem) {
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
 }
 
+function inferGender(item: TryOnHistoryItem): Exclude<GenderFilter, "all"> | "unknown" {
+  const category = item.config.category?.toLowerCase() ?? "";
+  if (category.startsWith("women_") || category === "women" || category === "women_bra" || category.includes("bra")) {
+    return "woman";
+  }
+  if (category.startsWith("men_") || category === "men") return "man";
+
+  const searchText = [
+    item.config.prompt,
+    item.inputs.person_url,
+    item.inputs.garment_url,
+    item.inputs.garment_top_url,
+    item.inputs.garment_bottom_url,
+    item.inputs.garment_dress_url
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (/(^|[^a-z])(male|men|man)([^a-z]|$)/.test(searchText)) return "man";
+  if (/(^|[^a-z])(female|women|woman|bra)([^a-z]|$)/.test(searchText)) return "woman";
+  return "unknown";
+}
+
+function matchesGenderFilter(item: TryOnHistoryItem, filter: GenderFilter) {
+  if (filter === "all") return true;
+  return inferGender(item) === filter;
+}
+
 export function HistoryPanel() {
   const resultJobId = useTryOnStore((state) => state.result?.job_id);
   const resultStatus = useTryOnStore((state) => state.result?.status);
   const setField = useTryOnStore((state) => state.setField);
   const [items, setItems] = useState<TryOnHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [genderFilter, setGenderFilter] = useState<GenderFilter>("all");
+  const [successOnly, setSuccessOnly] = useState(false);
 
   async function refresh() {
     setLoading(true);
     try {
-      const response = await getTryOnHistory(20);
+      const response = await getTryOnHistory(HISTORY_LIMIT);
       setItems(response.items);
     } finally {
       setLoading(false);
@@ -88,6 +122,13 @@ export function HistoryPanel() {
     }
   }, [resultJobId, resultStatus]);
 
+  const filteredItems = items.filter((item) => {
+    if (!matchesGenderFilter(item, genderFilter)) return false;
+    if (successOnly && item.status !== "completed") return false;
+    return true;
+  });
+  const hasFilters = genderFilter !== "all" || successOnly;
+
   return (
     <section className="history-panel" aria-label="History">
       <div className="history-header">
@@ -96,8 +137,30 @@ export function HistoryPanel() {
           <RefreshCw className={loading ? "spin" : ""} size={17} />
         </button>
       </div>
+      <div className="history-controls">
+        <div className="history-segmented" role="group" aria-label="Gender filter">
+          {(["all", "man", "woman"] as GenderFilter[]).map((filter) => (
+            <button
+              className={genderFilter === filter ? "active" : ""}
+              type="button"
+              onClick={() => setGenderFilter(filter)}
+              key={filter}
+            >
+              {filter === "all" ? "All" : filter === "man" ? "Man" : "Woman"}
+            </button>
+          ))}
+        </div>
+        <label className="history-success-toggle">
+          <input
+            type="checkbox"
+            checked={successOnly}
+            onChange={(event) => setSuccessOnly(event.target.checked)}
+          />
+          Success only
+        </label>
+      </div>
       <div className="history-list">
-        {items.map((item) => {
+        {filteredItems.map((item) => {
           const resultUrl = resolveAssetUrl(item.result_url);
           const stageTimings = formatStageTimings(item);
           return (
@@ -124,7 +187,9 @@ export function HistoryPanel() {
             </button>
           );
         })}
-        {!items.length && <div className="history-empty">No jobs</div>}
+        {!filteredItems.length && (
+          <div className="history-empty">{items.length && hasFilters ? "No matching jobs" : "No jobs"}</div>
+        )}
       </div>
     </section>
   );
