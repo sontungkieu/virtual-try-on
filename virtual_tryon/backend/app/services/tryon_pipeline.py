@@ -43,6 +43,10 @@ from app.utils.seed import normalize_seed, set_seed
 logger = logging.getLogger(__name__)
 
 
+KLEIN_BNB_4BIT_ENGINE_MODES = {"klein_bnb_4bit", "idm_klein_hybrid_pro"}
+KLEIN_ENGINE_MODES = {"klein_lora", "klein_bnb_4bit"}
+HYBRID_ENGINE_MODES = {"idm_klein_hybrid", "idm_klein_hybrid_pro"}
+NO_REFINER_ENGINE_MODES = {"flux_redux_catvton", *HYBRID_ENGINE_MODES}
 MASK_CACHE_VERSION = "mask-v6-innerwear-hand-protection"
 MASK_CACHE_IMAGE_FILES = {
     "raw_mask": ("raw_mask.png", "L"),
@@ -131,25 +135,32 @@ class TryOnPipeline:
             return request.garment_dress or request.garment_top or request.garment_bottom  # type: ignore[return-value]
         raise InputValidationError(f"No garment image provided for category '{request.category}'.")
 
-    def _settings_for_request(self, request: PipelineRequest) -> Settings:
+    def settings_for_selection(
+        self,
+        engine_mode: str | None = None,
+        *,
+        output_width: int | None = None,
+        output_height: int | None = None,
+        steps: int | None = None,
+    ) -> Settings:
         settings = self.settings
-        has_generation_overrides = any([request.output_width, request.output_height, request.steps])
-        if not request.engine_mode and not has_generation_overrides:
+        has_generation_overrides = any([output_width, output_height, steps])
+        if not engine_mode and not has_generation_overrides:
             return settings
-        mode = request.engine_mode
+        mode = engine_mode
         mode_settings = settings.model_copy(deep=True)
-        if request.output_width:
-            mode_settings.image.output_width = request.output_width
-            mode_settings.idm_vton.default_width = request.output_width
-            mode_settings.klein_tryon_lora.default_width = request.output_width
-        if request.output_height:
-            mode_settings.image.output_height = request.output_height
-            mode_settings.idm_vton.default_height = request.output_height
-            mode_settings.klein_tryon_lora.default_height = request.output_height
-        if request.steps:
-            mode_settings.idm_vton.steps = request.steps
-            mode_settings.klein_tryon_lora.num_inference_steps = request.steps
-            mode_settings.klein_tryon_lora.steps = request.steps
+        if output_width:
+            mode_settings.image.output_width = output_width
+            mode_settings.idm_vton.default_width = output_width
+            mode_settings.klein_tryon_lora.default_width = output_width
+        if output_height:
+            mode_settings.image.output_height = output_height
+            mode_settings.idm_vton.default_height = output_height
+            mode_settings.klein_tryon_lora.default_height = output_height
+        if steps:
+            mode_settings.idm_vton.steps = steps
+            mode_settings.klein_tryon_lora.num_inference_steps = steps
+            mode_settings.klein_tryon_lora.steps = steps
         if not mode:
             return mode_settings
         if mode == "idm_vton":
@@ -168,18 +179,55 @@ class TryOnPipeline:
             mode_settings.refinement.enabled = True
         elif mode == "flux_redux_catvton":
             mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "comfyui_flux_redux"
-        elif mode == "klein_lora":
+        elif mode in KLEIN_ENGINE_MODES:
             mode_settings.pipeline.engine = "klein_tryon_lora"
             mode_settings.klein_tryon_lora.enabled = True
-        elif mode == "idm_klein_hybrid":
+            if mode in KLEIN_BNB_4BIT_ENGINE_MODES:
+                self._apply_klein_bnb_4bit_settings(mode_settings)
+        elif mode in HYBRID_ENGINE_MODES:
             mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "idm_klein_hybrid"
             mode_settings.idm_vton.enabled = True
             mode_settings.klein_tryon_lora.enabled = True
+            if mode == "idm_klein_hybrid_pro":
+                self._apply_idm_torch_compile_settings(mode_settings)
+                self._apply_klein_bnb_4bit_settings(mode_settings)
         elif mode == "catvton":
             mode_settings.pipeline.engine = "catvton"
         else:
             raise InputValidationError(f"Unsupported engine_mode '{mode}'.")
         return mode_settings
+
+    def _settings_for_request(self, request: PipelineRequest) -> Settings:
+        return self.settings_for_selection(
+            request.engine_mode,
+            output_width=request.output_width,
+            output_height=request.output_height,
+            steps=request.steps,
+        )
+
+    def preload_engine(self, engine_mode: str | None = None) -> dict:
+        settings = self.settings_for_selection(engine_mode)
+        engine = create_tryon_engine(settings)
+        if hasattr(engine, "preload"):
+            return engine.preload()
+        engine.prepare()
+        return {"status": "ready", "engine": getattr(engine, "name", settings.pipeline.engine)}
+
+    @staticmethod
+    def _apply_klein_bnb_4bit_settings(settings: Settings) -> None:
+        settings.klein_tryon_lora.enabled = True
+        settings.klein_tryon_lora.device_map = "cuda"
+        settings.klein_tryon_lora.quantization = "bnb_4bit"
+        settings.klein_tryon_lora.quantize_components = ["transformer", "text_encoder"]
+        settings.klein_tryon_lora.tensorrt_profile = "none"
+        settings.klein_tryon_lora.tensorrt_components = []
+
+    @staticmethod
+    def _apply_idm_torch_compile_settings(settings: Settings) -> None:
+        settings.idm_vton.enabled = True
+        settings.idm_vton.resident_worker = True
+        settings.idm_vton.resident_worker_optimization = "torch_compile"
+        settings.idm_vton.resident_worker_fallback = True
 
     @staticmethod
     def _prompt_engine_mode(request: PipelineRequest, settings: Settings) -> EngineMode:
@@ -190,7 +238,9 @@ class TryOnPipeline:
             "idm_mask_expanded_flux": EngineMode.IDM_MASK_EXPANDED_FLUX,
             "flux_redux_catvton": EngineMode.IDM_MASK_EXPANDED_FLUX,
             "klein_lora": EngineMode.KLEIN_LORA,
+            "klein_bnb_4bit": EngineMode.KLEIN_LORA,
             "idm_klein_hybrid": EngineMode.KLEIN_LORA,
+            "idm_klein_hybrid_pro": EngineMode.KLEIN_LORA,
             "catvton": EngineMode.CATVTON,
         }
         if request.engine_mode:
@@ -646,6 +696,7 @@ class TryOnPipeline:
                 "human_parse": human_parse.warning,
                 "densepose": densepose.warning,
                 "deterministic": request.deterministic,
+                "progress_callback": request.progress_callback,
             },
         )
 
@@ -691,9 +742,20 @@ class TryOnPipeline:
             "comfyui_flux_redux": "success" if core_engine_name == "comfyui_flux_redux" else "skipped",
             "catvton": "success" if core_engine_name == "catvton" else "skipped",
             "klein_lora": "success" if core_engine_name in {"klein_tryon_lora", "idm_klein_hybrid"} else "skipped",
+            "klein_bnb_4bit": (
+                "success"
+                if request.engine_mode in KLEIN_BNB_4BIT_ENGINE_MODES
+                and core_engine_name in {"klein_tryon_lora", "idm_klein_hybrid"}
+                else "skipped"
+            ),
+            "idm_klein_hybrid_pro": (
+                "success"
+                if request.engine_mode == "idm_klein_hybrid_pro" and core_engine_name == "idm_klein_hybrid"
+                else "skipped"
+            ),
         }
         refiner_status = "skipped"
-        use_refiner = False if request.engine_mode == "flux_redux_catvton" else request.use_refiner or request.engine_mode in {
+        use_refiner = False if request.engine_mode in NO_REFINER_ENGINE_MODES else request.use_refiner or request.engine_mode in {
             "idm_vton_flux",
             "idm_mask_expanded_flux",
         }
@@ -799,7 +861,8 @@ class TryOnPipeline:
             "engine_config": engine_config,
             "commit_sha": self._commit_sha(),
             "category": request.category,
-            "engine": getattr(engine, "name", "unknown"),
+            "engine": request.engine_mode or getattr(engine, "name", "unknown"),
+            "runtime_engine": getattr(engine, "name", "unknown"),
             "prompt": prompt,
             "prompt_variant": request.prompt_variant,
             "testcase_id": request.testcase_id,

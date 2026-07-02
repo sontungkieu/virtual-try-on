@@ -20,6 +20,12 @@ DEFAULT_OUTPUT_WIDTH = 512
 DEFAULT_OUTPUT_HEIGHT = 768
 DEFAULT_STEPS = 8
 DEFAULT_SEED = 2026070201
+REUSABLE_UI_PRESETS = [
+    ("backend_tryon_dropdown", "idm_vton", DEFAULT_STEPS, "One UI graph with category, engine, resolution, and step dropdowns."),
+    ("backend_tryon_hybrid_pro", "idm_klein_hybrid_pro", 4, "IDM resident torch.compile plus Klein bnb 4-bit hybrid preset."),
+    ("backend_tryon_expanded_mask", "idm_mask_expanded", DEFAULT_STEPS, "Expanded IDM mask preset for broader replacement regions."),
+    ("backend_tryon_klein_4bit", "klein_bnb_4bit", 4, "Pure local Klein LoRA bnb 4-bit preset."),
+]
 
 
 @dataclass(frozen=True)
@@ -219,7 +225,9 @@ def build_ui_workflow(
     height: int,
     steps: int,
     engine_mode: str,
+    filename_prefix: str | None = None,
 ) -> dict[str, Any]:
+    output_prefix = filename_prefix or f"vton_omnitry_repro/{row['case_id']}/{engine_mode}"
     links = [
         [1, 1, 0, 3, 0, "IMAGE"],
         [2, 2, 0, 3, 1, "IMAGE"],
@@ -241,6 +249,8 @@ def build_ui_workflow(
                     engine_mode,
                     prompt,
                     int(row["seed"]),
+                    # ComfyUI inserts this seed control widget before the next declared input.
+                    "fixed",
                     COMFY.replace(":8188", ":8000"),
                     width,
                     height,
@@ -260,8 +270,8 @@ def build_ui_workflow(
                 ],
                 title="Backend try-on API",
             ),
-            _ui_node(4, "SaveImage", (900, 0), [f"vton_omnitry_repro/{row['case_id']}/{engine_mode}/result"], inputs=[{"name": "images", "type": "IMAGE", "link": 3}]),
-            _ui_node(5, "SaveImage", (900, 180), [f"vton_omnitry_repro/{row['case_id']}/{engine_mode}/mask_preview"], inputs=[{"name": "images", "type": "IMAGE", "link": 4}]),
+            _ui_node(4, "SaveImage", (900, 0), [f"{output_prefix}/result"], inputs=[{"name": "images", "type": "IMAGE", "link": 3}]),
+            _ui_node(5, "SaveImage", (900, 180), [f"{output_prefix}/mask_preview"], inputs=[{"name": "images", "type": "IMAGE", "link": 4}]),
         ],
         "links": links,
         "groups": [],
@@ -269,6 +279,30 @@ def build_ui_workflow(
         "extra": {"ds": {"scale": 0.75, "offset": [100, 50]}},
         "version": 0.4,
     }
+
+
+def preferred_sample_row(rows: list[dict[str, str]]) -> dict[str, str]:
+    return next((row for row in rows if "kga1151" in row["case_id"]), rows[0])
+
+
+def write_reusable_ui_workflows(rows: list[dict[str, str]], prompt_by_id: dict[str, str], width: int, height: int) -> list[dict[str, str]]:
+    row = preferred_sample_row(rows)
+    prompt = prompt_by_id[row["case_id"]]
+    exported: list[dict[str, str]] = []
+    for preset_id, engine_mode, steps, notes in REUSABLE_UI_PRESETS:
+        workflow = build_ui_workflow(
+            row=row,
+            prompt=prompt,
+            width=width,
+            height=height,
+            steps=steps,
+            engine_mode=engine_mode,
+            filename_prefix=f"vton_reusable/{preset_id}",
+        )
+        path = WORKFLOW_DIR / f"{preset_id}_ui.workflow.json"
+        write_json(path, workflow)
+        exported.append({"name": preset_id, "engine_mode": engine_mode, "ui": path.as_posix(), "notes": notes})
+    return exported
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -318,15 +352,30 @@ def build_readme(rows: list[dict[str, str]], engine_mode: str, width: int, heigh
         "| `*_api.json` | API prompt | Queue with ComfyUI `/prompt`. |",
         "| `*_ui.workflow.json` | UI workflow | Load in the ComfyUI editor. |",
         "",
-        "## Inputs",
+        "## Recommended reusable UI workflows",
         "",
-        "The script copies inputs into `/workspace/ComfyUI/input/vton_omnitry_repro/`.",
-        "",
-        "## Cases",
-        "",
-        "| case | category | target | person | garment | seed |",
-        "|---|---|---|---|---|---|",
+        "| File | Default engine | Notes |",
+        "|---|---|---|",
     ]
+    for preset_id, engine_mode, _steps, notes in REUSABLE_UI_PRESETS:
+        lines.append(f"| `{preset_id}_ui.workflow.json` | `{engine_mode}` | {notes} |")
+    lines.extend(
+        [
+            "",
+            "The per-case UI workflows are retained for reproducibility, but the reusable files are enough for manual ComfyUI use because the backend node exposes category, engine, resolution, and step controls as dropdowns/inputs.",
+            "",
+            "UI workflows include ComfyUI's generated seed `control after generate` widget set to `fixed`, so later backend API fields stay aligned.",
+            "",
+            "## Inputs",
+            "",
+            "The script copies inputs into `/workspace/ComfyUI/input/vton_omnitry_repro/`.",
+            "",
+            "## Cases",
+            "",
+            "| case | category | target | person | garment | seed |",
+            "|---|---|---|---|---|---|",
+        ]
+    )
     for row in rows:
         lines.append(
             f"| `{row['case_id']}` | `{row['category']}` | `{row['target_region']}` | "
@@ -348,7 +397,9 @@ def main() -> int:
             "idm_vton_flux",
             "idm_mask_expanded_flux",
             "klein_lora",
+            "klein_bnb_4bit",
             "idm_klein_hybrid",
+            "idm_klein_hybrid_pro",
             "flux_redux_catvton",
         ],
     )
@@ -397,6 +448,8 @@ def main() -> int:
         if first_prompt is None:
             first_prompt = api_prompt
 
+    reusable_workflows = write_reusable_ui_workflows(rows, prompt_by_id, args.width, args.height)
+
     manifest = {
         "generated_by": "scripts/comfyui_omnitry_repro.py",
         "workflow_dir": WORKFLOW_DIR.as_posix(),
@@ -408,6 +461,7 @@ def main() -> int:
         "case_count": len(rows),
         "rows": rows,
         "workflows": exported,
+        "reusable_ui_workflows": reusable_workflows,
     }
     write_json(WORKFLOW_DIR / "manifest.json", manifest)
     (WORKFLOW_DIR / "README.md").write_text(

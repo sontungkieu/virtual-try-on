@@ -24,10 +24,11 @@ from app.utils.errors import (
 logger = logging.getLogger(__name__)
 
 
-STAGE_ORDER = ("queued", "running", "generating", "refining", "completed")
+STAGE_ORDER = ("queued", "running", "loading_model", "generating", "refining", "completed")
 STAGE_LABELS = {
     "queued": "Queued",
-    "running": "Running",
+    "running": "Preprocess",
+    "loading_model": "Loading model",
     "generating": "Generating",
     "refining": "Refining",
     "completed": "Completed",
@@ -124,9 +125,9 @@ class JobService:
             return self._engine
         if request.engine_mode in {"idm_vton", "idm_mask_expanded", "idm_vton_flux", "idm_mask_expanded_flux"}:
             return "mock" if self._engine == "mock" else "idm_vton"
-        if request.engine_mode == "klein_lora":
+        if request.engine_mode in {"klein_lora", "klein_bnb_4bit"}:
             return "klein_tryon_lora"
-        if request.engine_mode == "idm_klein_hybrid":
+        if request.engine_mode in {"idm_klein_hybrid", "idm_klein_hybrid_pro"}:
             return "mock" if self._engine == "mock" else "idm_klein_hybrid"
         if request.engine_mode == "flux_redux_catvton":
             return "comfyui_flux_redux"
@@ -236,15 +237,26 @@ class JobService:
                 stage = self._stage_by_key(job, key)
                 if stage is None or stage.status in {"pending", "running"}:
                     self._apply_stage(job, key, "completed", when=finished)
+            loading_model = self._stage_by_key(job, "loading_model")
+            if loading_model is None or loading_model.status == "pending":
+                self._apply_stage(job, "loading_model", "skipped", when=finished)
+            elif loading_model.status == "running":
+                self._apply_stage(job, "loading_model", "completed", when=finished)
             refining = self._stage_by_key(job, "refining")
             if refining is None or refining.status == "pending":
                 self._apply_stage(job, "refining", "skipped", when=finished)
             self._apply_stage(job, "completed", "completed", when=finished)
         elif job.status == "cancelled":
+            for stage in list(job.stages):
+                if stage.status == "running":
+                    self._apply_stage(job, stage.key, "cancelled", when=finished)
             active = job.current_stage or "queued"
             self._apply_stage(job, active, "cancelled", when=finished)
             self._apply_stage(job, "completed", "cancelled", when=finished)
         elif job.status == "failed":
+            for stage in list(job.stages):
+                if stage.status == "running":
+                    self._apply_stage(job, stage.key, "failed", when=finished)
             active = job.current_stage
             if active and active != "completed":
                 stage = self._stage_by_key(job, active)
@@ -528,3 +540,14 @@ class JobService:
         if job is not None:
             return job
         return self._load_job_from_disk(job_id)
+
+    def prepare_model(self, engine_mode: str | None = None) -> dict:
+        started = time.monotonic()
+        self._slots.acquire()
+        try:
+            payload = self.pipeline.preload_engine(engine_mode)
+            payload.setdefault("status", "ready")
+            payload.setdefault("runtime_seconds", round(time.monotonic() - started, 3))
+            return payload
+        finally:
+            self._slots.release()

@@ -54,6 +54,24 @@ class IDMKleinHybridEngine:
     def prepare(self) -> None:
         self.idm_engine.prepare()
 
+    def preload(self) -> dict:
+        started = time.perf_counter()
+        idm_payload = self.idm_engine.preload()
+        message = (
+            "Hybrid cannot keep IDM and Klein pinned together on the 24 GB target GPU; "
+            "IDM is preloaded now and Klein loads during the second phase."
+        )
+        return {
+            "status": "ready",
+            "engine": self.name,
+            "message": message,
+            "runtime_seconds": round(time.perf_counter() - started, 3),
+            "components": {
+                "idm_vton": idm_payload,
+                "klein_tryon_lora": {"status": "deferred", "message": "Klein loads during the hybrid second phase."},
+            },
+        }
+
     def run(self, inputs: TryOnInputs) -> TryOnResult:
         started = time.perf_counter()
         output_dir = Path(inputs.output_dir or ".")

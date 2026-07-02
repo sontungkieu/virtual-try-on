@@ -53,6 +53,27 @@ select {
   gap: 2px;
 }
 
+.toolbar-status {
+  min-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #66736e;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-status .spin {
+  flex: 0 0 auto;
+}
+
+.toolbar-note {
+  max-width: min(620px, calc(100vw - 48px));
+  color: #66736e;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .toolbar-actions {
   flex: 0 0 auto;
   display: flex;
@@ -90,6 +111,11 @@ figcaption,
   cursor: pointer;
 }
 
+.primary-button {
+  min-width: 178px;
+  font-variant-numeric: tabular-nums;
+}
+
 .icon-button.neutral {
   border-color: #aeb8b4;
   background: #fff;
@@ -109,7 +135,7 @@ figcaption,
 
 .primary-button:disabled {
   opacity: 0.65;
-  cursor: progress;
+  cursor: not-allowed;
 }
 
 .icon-button {
@@ -535,7 +561,7 @@ textarea {
 .progress-timeline {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0 0 14px;
   padding: 0;
 }

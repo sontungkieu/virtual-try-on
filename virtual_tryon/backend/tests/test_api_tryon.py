@@ -15,6 +15,24 @@ def test_health_returns_ok(client):
     assert "idm_vton" in payload["models"]
 
 
+def test_prepare_model_endpoint_uses_selected_engine(client):
+    api = TestClient(client)
+    response = api.post("/tryon/model/prepare", json={"engine_mode": "idm_vton"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ready"
+    assert payload["engine_mode"] == "idm_vton"
+    assert payload["engine"] == "mock"
+    assert payload["metadata"]["engine"] == "mock"
+
+
+def test_prepare_model_rejects_invalid_engine_mode(client):
+    api = TestClient(client)
+    response = api.post("/tryon/model/prepare", json={"engine_mode": "not_real"})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_REQUEST"
+
+
 def test_tryon_reject_missing_person(client, png_file):
     api = TestClient(client)
     response = api.post(
@@ -172,7 +190,14 @@ def test_tryon_accepts_generation_overrides(client, png_file):
     assert newest["config"]["deterministic"] is True
     assert newest["finished_at"]
     assert newest["current_stage"] == "completed"
-    assert {stage["key"] for stage in newest["stages"]} >= {"queued", "running", "generating", "refining", "completed"}
+    assert {stage["key"] for stage in newest["stages"]} >= {
+        "queued",
+        "running",
+        "loading_model",
+        "generating",
+        "refining",
+        "completed",
+    }
 
 
 def test_tryon_rejects_invalid_generation_overrides(client, png_file):

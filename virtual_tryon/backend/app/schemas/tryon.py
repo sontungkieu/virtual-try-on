@@ -135,6 +135,19 @@ class HealthResponse(BaseModel):
     models: dict[str, str]
 
 
+class ModelPrepareRequest(BaseModel):
+    engine_mode: str | None = None
+
+
+class ModelPrepareResponse(BaseModel):
+    status: str
+    engine: str
+    engine_mode: str | None = None
+    runtime_seconds: float | None = None
+    metadata: dict = Field(default_factory=dict)
+    message: str | None = None
+
+
 class RefineResponse(BaseModel):
     job_id: str
     status: JobStatus

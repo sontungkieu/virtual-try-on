@@ -2,7 +2,7 @@
 
 These ComfyUI workflows reproduce the adult, non-sexual innerwear try-on cases from `data/inputs/omnitry/output_omnitry`.
 
-Default engine: `idm_klein_hybrid`
+Default engine: `idm_klein_hybrid_pro`
 Default resolution: `512x768`
 Default steps: `4`
 
@@ -13,6 +13,19 @@ Default steps: `4`
 | `manifest.json` | metadata | Copied ComfyUI input names and source paths. |
 | `*_api.json` | API prompt | Queue with ComfyUI `/prompt`. |
 | `*_ui.workflow.json` | UI workflow | Load in the ComfyUI editor. |
+
+## Recommended reusable UI workflows
+
+| File | Default engine | Notes |
+|---|---|---|
+| `backend_tryon_dropdown_ui.workflow.json` | `idm_vton` | One UI graph with category, engine, resolution, and step dropdowns. |
+| `backend_tryon_hybrid_pro_ui.workflow.json` | `idm_klein_hybrid_pro` | IDM resident torch.compile plus Klein bnb 4-bit hybrid preset. |
+| `backend_tryon_expanded_mask_ui.workflow.json` | `idm_mask_expanded` | Expanded IDM mask preset for broader replacement regions. |
+| `backend_tryon_klein_4bit_ui.workflow.json` | `klein_bnb_4bit` | Pure local Klein LoRA bnb 4-bit preset. |
+
+The per-case UI workflows are retained for reproducibility, but the reusable files are enough for manual ComfyUI use because the backend node exposes category, engine, resolution, and step controls as dropdowns/inputs.
+
+UI workflows include ComfyUI's generated seed `control after generate` widget set to `fixed`, so later backend API fields stay aligned.
 
 ## Inputs
 

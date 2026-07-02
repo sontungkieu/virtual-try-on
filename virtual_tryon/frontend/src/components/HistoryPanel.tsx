@@ -24,7 +24,8 @@ function formatStageTimings(item: TryOnHistoryItem) {
   if (!item.stages?.length) return null;
   const labels: Record<string, string> = {
     queued: "Queue",
-    running: "Run",
+    running: "Prep",
+    loading_model: "Load",
     generating: "Gen",
     refining: "Refine",
     completed: "Done"

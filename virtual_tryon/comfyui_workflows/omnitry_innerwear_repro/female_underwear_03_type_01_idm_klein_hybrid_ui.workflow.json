@@ -115,6 +115,7 @@
         "idm_klein_hybrid",
         "Adult non-sexual product virtual try-on. Replace only the lower innerwear region with the referenced women's underwear. Remove the original lower garment inside the mask completely. Preserve face, hair, pose, skin, upper clothing, legs outside the mask, lighting, and background.",
         2026070204,
+        "fixed",
         "http://127.0.0.1:8000",
         512,
         768,

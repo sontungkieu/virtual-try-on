@@ -13,6 +13,8 @@ from app.preprocessing.image_loader import load_image_from_bytes, validate_mime
 from app.schemas.tryon import (
     GenerationConfigSummary,
     HistoryInputs,
+    ModelPrepareRequest,
+    ModelPrepareResponse,
     RefineResponse,
     TryOnCategory,
     TryOnHistoryItem,
@@ -37,6 +39,27 @@ MAX_OUTPUT_PIXELS = 1024 * 1536
 MIN_STEPS = 4
 MAX_STEPS = 50
 HistoryGenderFilter = Literal["all", "man", "woman"]
+VALID_ENGINE_MODES = {
+    "idm_vton",
+    "idm_mask_expanded",
+    "idm_vton_flux",
+    "idm_mask_expanded_flux",
+    "flux_redux_catvton",
+    "klein_lora",
+    "klein_bnb_4bit",
+    "idm_klein_hybrid",
+    "idm_klein_hybrid_pro",
+    "catvton",
+}
+
+
+def _validate_engine_mode(engine_mode: str | None) -> None:
+    if engine_mode and engine_mode not in VALID_ENGINE_MODES:
+        raise ApiError(
+            "INVALID_REQUEST",
+            "engine_mode must be one of: " + ", ".join(sorted(VALID_ENGINE_MODES)) + ".",
+            status_code=400,
+        )
 
 
 def _validate_generation_overrides(
@@ -184,7 +207,7 @@ def _history_item_from_dir(job_dir) -> TryOnHistoryItem | None:
             deterministic=request_config.get("deterministic")
             if "deterministic" in request_config
             else job_payload.get("deterministic"),
-            engine=metadata.get("engine"),
+            engine=request_config.get("engine_mode") or metadata.get("engine"),
             category=request_config.get("category") or metadata.get("category"),
             prompt=metadata.get("prompt"),
             use_refiner=request_config.get("use_refiner")
@@ -253,22 +276,7 @@ async def create_tryon(
     if not any([garment_top, garment_bottom, garment_dress]):
         raise ApiError("INVALID_REQUEST", "At least one garment image is required.", status_code=400)
     _validate_generation_overrides(output_width, output_height, steps)
-    valid_engine_modes = {
-        "idm_vton",
-        "idm_mask_expanded",
-        "idm_vton_flux",
-        "idm_mask_expanded_flux",
-        "flux_redux_catvton",
-        "klein_lora",
-        "idm_klein_hybrid",
-        "catvton",
-    }
-    if engine_mode and engine_mode not in valid_engine_modes:
-        raise ApiError(
-            "INVALID_REQUEST",
-            "engine_mode must be one of: " + ", ".join(sorted(valid_engine_modes)) + ".",
-            status_code=400,
-        )
+    _validate_engine_mode(engine_mode)
     valid_prompt_variants = {
         "default",
         "strong_remove_old_garment",
@@ -325,6 +333,26 @@ async def create_tryon(
         background_tasks.add_task(job_service.run_queued_job, request)
         return queued
     return job_service.create_tryon_job(request)
+
+
+@router.post("/tryon/model/prepare", response_model=ModelPrepareResponse)
+def prepare_tryon_model(payload: ModelPrepareRequest) -> ModelPrepareResponse:
+    engine_mode = payload.engine_mode or None
+    _validate_engine_mode(engine_mode)
+    try:
+        result = get_job_service().prepare_model(engine_mode)
+    except ModelUnavailableError as exc:
+        raise ApiError("ENGINE_UNAVAILABLE", str(exc), status_code=503) from exc
+    except Exception as exc:
+        raise ApiError("ENGINE_PREPARE_FAILED", str(exc), status_code=503) from exc
+    return ModelPrepareResponse(
+        status=str(result.get("status") or "ready"),
+        engine=str(result.get("engine") or engine_mode or get_settings().pipeline.engine),
+        engine_mode=engine_mode,
+        runtime_seconds=result.get("runtime_seconds"),
+        metadata=result,
+        message=result.get("message"),
+    )
 
 
 @router.get("/tryon/history", response_model=TryOnHistoryResponse)

@@ -1,4 +1,4 @@
-import type { TryOnHistoryResponse, TryOnResult } from "../store/tryonStore";
+import type { EngineMode, ModelPrepareResponse, TryOnHistoryResponse, TryOnResult } from "../store/tryonStore";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -57,6 +57,18 @@ export async function cancelTryOnJob(jobId: string): Promise<TryOnResult> {
   const response = await fetch(`${API_BASE_URL}/tryon/${jobId}`, { method: "DELETE" });
   if (!response.ok) {
     return throwApiError(response, "Cancel request failed");
+  }
+  return response.json();
+}
+
+export async function prepareTryOnModel(engineMode: EngineMode): Promise<ModelPrepareResponse> {
+  const response = await fetch(`${API_BASE_URL}/tryon/model/prepare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ engine_mode: engineMode || null })
+  });
+  if (!response.ok) {
+    return throwApiError(response, "Model prepare request failed");
   }
   return response.json();
 }

@@ -29,7 +29,7 @@
       "api_base": "http://127.0.0.1:8000",
       "output_width": 512,
       "output_height": 768,
-      "steps": 8,
+      "steps": 4,
       "deterministic": true,
       "timeout_s": 900,
       "poll_interval_s": 1.0
@@ -42,7 +42,7 @@
         "3",
         0
       ],
-      "filename_prefix": "vton_omnitry_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1/idm_vton/idm_result"
+      "filename_prefix": "vton_omnitry_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1/idm_vton/result"
     }
   },
   "5": {

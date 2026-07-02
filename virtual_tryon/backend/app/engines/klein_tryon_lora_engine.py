@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import json
 import os
+import atexit
+import queue
 import subprocess
 import sys
 import threading
 import time
 import urllib.request
 from urllib.parse import urlsplit, urlunsplit
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from PIL import Image
 from PIL import ImageOps
@@ -24,8 +28,215 @@ from app.utils.image_io import save_image
 
 SENSITIVE_KEY_PARTS = {"token", "key", "authorization", "secret", "credential"}
 SUPPORTED_BACKENDS = {"fal_api", "diffusers_local", "disabled"}
+RESIDENT_PROTOCOL_PREFIX = "__KLEIN_TRYON_WORKER__ "
 _LOCAL_PIPE_CACHE: dict[str, Any] = {}
 _LOCAL_PIPE_LOCK = threading.RLock()
+
+
+class KleinResidentClient:
+    def __init__(self, python_executable: str, entrypoint: Path, timeout_seconds: int) -> None:
+        self.python_executable = python_executable
+        self.entrypoint = entrypoint
+        self.timeout_seconds = timeout_seconds
+        self._process: subprocess.Popen | None = None
+        self._lock = threading.RLock()
+        self._stdout_queue: queue.Queue[str] = queue.Queue()
+        self._stdout_tail: deque[str] = deque(maxlen=200)
+        self._stderr_tail: deque[str] = deque(maxlen=400)
+
+    def is_running(self) -> bool:
+        return self._process is not None and self._process.poll() is None
+
+    def status(self) -> str:
+        if self.is_running():
+            assert self._process is not None
+            return f"running pid={self._process.pid}"
+        if self._process is None:
+            return "not_started"
+        return f"exited rc={self._process.returncode}"
+
+    def stdout_tail(self) -> str:
+        return "".join(self._stdout_tail)
+
+    def stderr_tail(self) -> str:
+        return "".join(self._stderr_tail)
+
+    def start(self) -> None:
+        if self.is_running():
+            return
+        if not self.entrypoint.exists():
+            raise ModelUnavailableError(f"Klein resident worker entrypoint not found: {self.entrypoint}")
+        self._stdout_queue = queue.Queue()
+        self._stdout_tail.clear()
+        self._stderr_tail.clear()
+        command = [self.python_executable, str(self.entrypoint), "--resident"]
+        env = {**os.environ, "PYTHONUNBUFFERED": "1", "TOKENIZERS_PARALLELISM": "false"}
+        self._process = subprocess.Popen(
+            command,
+            cwd=self.entrypoint.parent,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            env=env,
+        )
+        self._start_reader_threads()
+        ready = self._read_protocol_message(
+            expected_type="ready",
+            request_id=None,
+            timeout_seconds=min(max(self.timeout_seconds, 60), 600),
+        )
+        if not ready.get("ok"):
+            error = ready.get("error") or "unknown startup error"
+            stderr_tail = self.stderr_tail()
+            self.stop()
+            raise EngineExecutionError(f"Klein resident worker failed to start: {error}\n{stderr_tail[-2000:]}")
+
+    def _start_reader_threads(self) -> None:
+        assert self._process is not None
+        if self._process.stdout is not None:
+            threading.Thread(target=self._read_stdout, args=(self._process.stdout,), daemon=True).start()
+        if self._process.stderr is not None:
+            threading.Thread(target=self._read_stderr, args=(self._process.stderr,), daemon=True).start()
+
+    def _read_stdout(self, stream) -> None:
+        for line in stream:
+            self._stdout_tail.append(line)
+            self._stdout_queue.put(line)
+
+    def _read_stderr(self, stream) -> None:
+        for line in stream:
+            self._stderr_tail.append(line)
+
+    def _read_protocol_message(
+        self,
+        *,
+        expected_type: str | None,
+        request_id: str | None,
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.stop()
+                raise EngineExecutionError(
+                    f"Timed out waiting for Klein resident worker message after {timeout_seconds}s. "
+                    f"stderr_tail={self.stderr_tail()[-2000:]}"
+                )
+            try:
+                line = self._stdout_queue.get(timeout=min(0.5, remaining))
+            except queue.Empty:
+                if self._process is not None and self._process.poll() is not None:
+                    raise EngineExecutionError(
+                        f"Klein resident worker exited early. returncode={self._process.returncode} "
+                        f"stderr_tail={self.stderr_tail()[-2000:]}"
+                    )
+                continue
+            if not line.startswith(RESIDENT_PROTOCOL_PREFIX):
+                continue
+            try:
+                payload = json.loads(line[len(RESIDENT_PROTOCOL_PREFIX) :])
+            except json.JSONDecodeError:
+                continue
+            if expected_type is not None and payload.get("type") != expected_type:
+                continue
+            if request_id is not None and payload.get("request_id") != request_id:
+                continue
+            return payload
+
+    def request(
+        self,
+        message_type: str,
+        payload: dict[str, Any],
+        *,
+        output_dir: Path | None = None,
+        progress_callback: Any = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            self.start()
+            if self._process is None or self._process.stdin is None:
+                raise EngineExecutionError("Klein resident worker stdin is unavailable.")
+            request_id = uuid4().hex
+            message = {"type": message_type, "request_id": request_id, "payload": payload}
+            if output_dir is not None:
+                message["output_dir"] = str(output_dir)
+            self._process.stdin.write(json.dumps(message, separators=(",", ":"), default=str) + "\n")
+            self._process.stdin.flush()
+            while True:
+                response = self._read_protocol_message(
+                    expected_type=None,
+                    request_id=request_id,
+                    timeout_seconds=self.timeout_seconds,
+                )
+                response_type = response.get("type")
+                if response_type == "progress":
+                    if progress_callback is not None:
+                        progress_callback(response["stage"], response["status"])
+                    continue
+                if response_type != "result":
+                    continue
+                if not response.get("ok"):
+                    raise EngineExecutionError(
+                        "Klein resident worker request failed. "
+                        f"error={response.get('error')} stderr_tail={self.stderr_tail()[-2000:]}"
+                    )
+                result = response.get("result")
+                if not isinstance(result, dict):
+                    raise EngineExecutionError("Klein resident worker returned an invalid result payload.")
+                return result
+
+    def stop(self) -> None:
+        process = self._process
+        if process is None or process.poll() is not None:
+            return
+        try:
+            if process.stdin is not None:
+                process.stdin.write(json.dumps({"type": "shutdown", "request_id": uuid4().hex}) + "\n")
+                process.stdin.flush()
+            process.terminate()
+            process.wait(timeout=5)
+        except Exception:
+            process.kill()
+            process.wait(timeout=5)
+
+
+_RESIDENT_CLIENTS: dict[str, KleinResidentClient] = {}
+_RESIDENT_CLIENTS_LOCK = threading.RLock()
+_RESIDENT_ATEXIT_REGISTERED = False
+
+
+def _resident_client_key(python_executable: str, entrypoint: Path) -> str:
+    return json.dumps({"python": python_executable, "entrypoint": str(entrypoint)}, sort_keys=True)
+
+
+def _stop_resident_clients() -> None:
+    with _RESIDENT_CLIENTS_LOCK:
+        for client in _RESIDENT_CLIENTS.values():
+            client.stop()
+
+
+def stop_klein_resident_clients() -> None:
+    _stop_resident_clients()
+
+
+def _get_resident_client(config: EngineConfig, python_executable: str) -> KleinResidentClient:
+    global _RESIDENT_ATEXIT_REGISTERED
+    if config.entrypoint is None:
+        raise ModelUnavailableError("Klein resident worker entrypoint is not configured.")
+    key = _resident_client_key(python_executable, config.entrypoint)
+    with _RESIDENT_CLIENTS_LOCK:
+        if not _RESIDENT_ATEXIT_REGISTERED:
+            atexit.register(_stop_resident_clients)
+            _RESIDENT_ATEXIT_REGISTERED = True
+        client = _RESIDENT_CLIENTS.get(key)
+        if client is None:
+            client = KleinResidentClient(python_executable, config.entrypoint, config.timeout_seconds)
+            _RESIDENT_CLIENTS[key] = client
+        return client
 
 
 @dataclass(frozen=True)
@@ -182,6 +393,20 @@ class KleinTryOnLoraEngine:
     @property
     def local_worker_python(self) -> str:
         return os.getenv("TRYON_KLEIN_PYTHON") or sys.executable
+
+    def _model_payload(self) -> dict[str, Any]:
+        return {
+            "model_dir": str(self.local_model_dir),
+            "lora_path": str(self.config.lora_path),
+            "lora_scale": self.config.lora_scale,
+            "device_map": self.config.device_map,
+            "quantization": self.config.quantization,
+            "quantize_components": list(self.config.quantize_components),
+            **self._tensorrt_payload(),
+            "local_files_only": True,
+            "worker_python": self.local_worker_python,
+            "worker_entrypoint": str(self.config.entrypoint) if self.config.entrypoint else None,
+        }
 
     def _local_worker_check_error(self) -> str | None:
         if not self.config.entrypoint:
@@ -393,6 +618,39 @@ class KleinTryOnLoraEngine:
         availability = self.is_available()
         if not availability:
             raise ModelUnavailableError("Klein Try-On LoRA is not available. " + availability.status)
+
+    def preload(self, *, release_idm: bool = True) -> dict[str, Any]:
+        started = time.perf_counter()
+        self.prepare()
+        if self.config.backend != "diffusers_local":
+            return {
+                "status": "ready",
+                "engine": self.name,
+                "backend": self.config.backend,
+                "runtime_seconds": round(time.perf_counter() - started, 3),
+            }
+        if release_idm:
+            self._release_idm_resident_worker()
+        if self.config.entrypoint:
+            client = _get_resident_client(self.config, self.local_worker_python)
+            result = client.request("prepare", self._model_payload())
+            return {
+                "status": "ready",
+                "engine": self.name,
+                "backend": "diffusers_local",
+                "resident_worker": client.status(),
+                "runtime_seconds": round(time.perf_counter() - started, 3),
+                "worker": result,
+            }
+        pipe = self._load_diffusers_local_pipe()
+        return {
+            "status": "ready",
+            "engine": self.name,
+            "backend": "diffusers_local",
+            "resident_worker": "in_process",
+            "runtime_seconds": round(time.perf_counter() - started, 3),
+            "tensorrt": getattr(pipe, "_vton_tensorrt_metadata", {}),
+        }
 
     def _write_status(self, output_dir: Path, payload: dict[str, Any]) -> None:
         payload = _sanitize_payload(payload)
@@ -615,10 +873,25 @@ class KleinTryOnLoraEngine:
         output_dir: Path,
         seed: int | None,
         deterministic: bool,
+        progress_callback: Any = None,
     ) -> TryOnResult:
         if self.config.entrypoint:
-            return self._run_diffusers_local_subprocess(prompt, references, output_dir, seed, deterministic)
-        return self._run_diffusers_local_in_process(prompt, references, output_dir, seed, deterministic)
+            return self._run_diffusers_local_subprocess(
+                prompt,
+                references,
+                output_dir,
+                seed,
+                deterministic,
+                progress_callback=progress_callback,
+            )
+        return self._run_diffusers_local_in_process(
+            prompt,
+            references,
+            output_dir,
+            seed,
+            deterministic,
+            progress_callback=progress_callback,
+        )
 
     def _run_diffusers_local_subprocess(
         self,
@@ -627,6 +900,7 @@ class KleinTryOnLoraEngine:
         output_dir: Path,
         seed: int | None,
         deterministic: bool,
+        progress_callback: Any = None,
     ) -> TryOnResult:
         if not self.config.entrypoint:
             raise ModelUnavailableError("Klein Try-On LoRA local worker entrypoint is not configured.")
@@ -640,56 +914,32 @@ class KleinTryOnLoraEngine:
             image_paths.append(references.bottom_path.as_posix())
         request_payload = {
             **self._request_payload(prompt, references),
-            "model_dir": str(self.local_model_dir),
-            "lora_path": str(self.config.lora_path),
+            **self._model_payload(),
             "width": width,
             "height": height,
             "steps": self.steps,
             "guidance_scale": self.config.guidance_scale,
-            "lora_scale": self.config.lora_scale,
             "seed": seed,
             "deterministic": deterministic,
             "image_paths": image_paths,
-            "device_map": self.config.device_map,
-            "quantization": self.config.quantization,
-            "quantize_components": list(self.config.quantize_components),
-            **self._tensorrt_payload(),
-            "local_files_only": True,
-            "worker_python": self.local_worker_python,
-            "worker_entrypoint": str(self.config.entrypoint),
         }
         request_path = output_dir / "local_worker_request.json"
         request_path.write_text(json.dumps(_sanitize_payload(request_payload), indent=2), encoding="utf-8")
         self._save_json_aliases(output_dir, "local_generation", request_payload)
 
-        command = [
-            self.local_worker_python,
-            str(self.config.entrypoint),
-            "--request",
-            str(request_path),
-            "--output-dir",
-            str(output_dir),
-        ]
         started = time.perf_counter()
-        completed = subprocess.run(
-            command,
-            cwd=self.config.entrypoint.parent,
-            capture_output=True,
-            text=True,
-            timeout=self.config.timeout_seconds,
-            check=False,
-        )
+        client = _get_resident_client(self.config, self.local_worker_python)
+        try:
+            worker_payload = client.request(
+                "run",
+                request_payload,
+                output_dir=output_dir,
+                progress_callback=progress_callback,
+            )
+        finally:
+            (output_dir / "local_worker_stdout.txt").write_text(client.stdout_tail()[-8000:], encoding="utf-8")
+            (output_dir / "local_worker_stderr.txt").write_text(client.stderr_tail()[-8000:], encoding="utf-8")
         runtime_seconds = time.perf_counter() - started
-        (output_dir / "local_worker_stdout.txt").write_text(completed.stdout[-8000:], encoding="utf-8")
-        (output_dir / "local_worker_stderr.txt").write_text(completed.stderr[-8000:], encoding="utf-8")
-        if completed.returncode != 0:
-            message = (completed.stderr.strip() or completed.stdout.strip() or "local Klein worker failed")[-2000:]
-            raise EngineExecutionError(f"local Klein worker failed rc={completed.returncode}: {message}")
-        worker_result_path = output_dir / "worker_result.json"
-        if worker_result_path.exists():
-            worker_payload = json.loads(worker_result_path.read_text(encoding="utf-8"))
-        else:
-            worker_payload = json.loads(completed.stdout)
         result_path = Path(worker_payload.get("result_path", output_dir / "klein_lora_result.png"))
         image = Image.open(result_path).convert("RGB")
         save_image(image, output_dir / "result.png")
@@ -698,6 +948,7 @@ class KleinTryOnLoraEngine:
             "backend": "diffusers_local",
             "runtime_seconds": round(runtime_seconds, 3),
             "worker": worker_payload,
+            "resident_worker": client.status(),
             "model_dir": str(self.local_model_dir),
             "lora_path": str(self.config.lora_path),
             "lora_scale": self.config.lora_scale,
@@ -723,6 +974,7 @@ class KleinTryOnLoraEngine:
         output_dir: Path,
         seed: int | None,
         deterministic: bool,
+        progress_callback: Any = None,
     ) -> TryOnResult:
         if self.config.require_three_images and references.bottom_image is None:
             raise ModelUnavailableError("Klein Try-On LoRA requires three image references for diffusers_local.")
@@ -758,9 +1010,17 @@ class KleinTryOnLoraEngine:
             },
         )
 
+        if progress_callback is not None:
+            progress_callback("loading_model", "running")
+        load_started = time.perf_counter()
         pipe = self._load_diffusers_local_pipe()
+        load_seconds = time.perf_counter() - load_started
+        if progress_callback is not None:
+            progress_callback("loading_model", "completed")
         generator_device = "cuda" if torch.cuda.is_available() else "cpu"
         generator = torch.Generator(device=generator_device).manual_seed(int(seed or 0))
+        if progress_callback is not None:
+            progress_callback("generating", "running")
         started = time.perf_counter()
         try:
             output = pipe(
@@ -782,6 +1042,8 @@ class KleinTryOnLoraEngine:
                 guidance_scale=float(self.config.guidance_scale),
             )
         runtime_seconds = time.perf_counter() - started
+        if progress_callback is not None:
+            progress_callback("generating", "completed")
         image = output.images[0].convert("RGB")
         save_image(image, output_dir / "klein_lora_result.png")
         save_image(image, output_dir / "result.png")
@@ -789,6 +1051,7 @@ class KleinTryOnLoraEngine:
             "engine": self.name,
             "backend": "diffusers_local",
             "runtime_seconds": round(runtime_seconds, 3),
+            "load_model_seconds": round(load_seconds, 3),
             "model_dir": str(self.local_model_dir),
             "lora_path": str(self.config.lora_path),
             "lora_scale": self.config.lora_scale,
@@ -864,6 +1127,7 @@ class KleinTryOnLoraEngine:
                     output_dir,
                     inputs.seed,
                     bool(inputs.extra.get("deterministic", False)),
+                    progress_callback=inputs.extra.get("progress_callback"),
                 )
             else:
                 raise ModelUnavailableError("Klein Try-On LoRA backend is disabled.")

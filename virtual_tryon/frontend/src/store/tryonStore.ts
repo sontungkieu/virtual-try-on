@@ -16,7 +16,9 @@ export type EngineMode =
   | "idm_mask_expanded_flux"
   | "flux_redux_catvton"
   | "klein_lora"
+  | "klein_bnb_4bit"
   | "idm_klein_hybrid"
+  | "idm_klein_hybrid_pro"
   | "catvton";
 export type PromptVariant = "default" | "strong_remove_old_garment" | "identity_strict";
 export type StageStatus = "pending" | "running" | "completed" | "skipped" | "failed" | "cancelled";
@@ -43,6 +45,11 @@ export type ArtifactManifest = {
 export type TryOnResult = {
   job_id: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled" | "cancel_requested";
+  created_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  updated_at?: string | null;
+  runtime_seconds?: number | null;
   result_url?: string | null;
   error?: string | null;
   error_code?: string | null;
@@ -112,6 +119,15 @@ export type TryOnHistoryResponse = {
   items: TryOnHistoryItem[];
 };
 
+export type ModelPrepareResponse = {
+  status: "loading" | "ready" | "failed" | string;
+  engine: string;
+  engine_mode?: EngineMode | null;
+  runtime_seconds?: number | null;
+  metadata?: Record<string, unknown>;
+  message?: string | null;
+};
+
 type TryOnState = {
   personImage?: File;
   topImage?: File;
@@ -134,6 +150,9 @@ type TryOnState = {
   deterministic: boolean;
   showDebug: boolean;
   loading: boolean;
+  modelPreparing: boolean;
+  modelStatus?: ModelPrepareResponse;
+  modelError?: string;
   jobId?: string;
   result?: TryOnResult;
   error?: string;
@@ -159,6 +178,7 @@ export const useTryOnStore = create<TryOnState>((set) => ({
   deterministic: false,
   showDebug: true,
   loading: false,
+  modelPreparing: false,
   setField: (key, value) => set({ [key]: value } as Partial<TryOnState>),
   resetResult: () => set({ result: undefined, error: undefined, jobId: undefined })
 }));

@@ -45,18 +45,56 @@ def _selectable_engine_status_settings(settings: Settings) -> Settings:
     return status_settings
 
 
+def _klein_bnb_4bit_status_settings(settings: Settings) -> Settings:
+    status_settings = _selectable_engine_status_settings(settings)
+    status_settings.klein_tryon_lora.device_map = "cuda"
+    status_settings.klein_tryon_lora.quantization = "bnb_4bit"
+    status_settings.klein_tryon_lora.quantize_components = ["transformer", "text_encoder"]
+    status_settings.klein_tryon_lora.tensorrt_profile = "none"
+    status_settings.klein_tryon_lora.tensorrt_components = []
+    return status_settings
+
+
+def _hybrid_pro_status_settings(settings: Settings) -> Settings:
+    status_settings = _klein_bnb_4bit_status_settings(settings)
+    status_settings.idm_vton.resident_worker = True
+    status_settings.idm_vton.resident_worker_optimization = "torch_compile"
+    status_settings.idm_vton.resident_worker_fallback = True
+    return status_settings
+
+
+def _preset_status(base_status: str, preset: str) -> str:
+    if base_status.startswith("available"):
+        return f"{base_status}; preset={preset}"
+    return base_status
+
+
+def _hybrid_status(idm_status: str, klein_status: str) -> str:
+    if idm_status.startswith("available") and klein_status.startswith("available"):
+        return f"available; idm=({idm_status}); klein=({klein_status})"
+    return f"unavailable: idm=({idm_status}); klein=({klein_status})"
+
+
 def model_statuses(settings: Settings) -> dict[str, str]:
     status_settings = _selectable_engine_status_settings(settings)
-    idm_engine = IDMVTonEngine(status_settings.idm_vton)
+    hybrid_pro_status_settings = _hybrid_pro_status_settings(settings)
+    idm_status = IDMVTonEngine(status_settings.idm_vton).status()
+    idm_compile_status = IDMVTonEngine(hybrid_pro_status_settings.idm_vton).status()
+    klein_status = KleinTryOnLoraEngine(status_settings.klein_tryon_lora).status()
+    klein_bnb_status = _preset_status(klein_status, "device_map=cuda; quantization=bnb_4bit")
     engines = {
         "flux_refiner": FluxRefinerEngine(settings.flux_refiner),
         "comfyui_flux_redux": ComfyUIFluxReduxEngine(settings),
         "catvton": CatVTonEngine(settings.catvton),
-        "klein_tryon_lora": KleinTryOnLoraEngine(status_settings.klein_tryon_lora),
-        "idm_klein_hybrid": IDMKleinHybridEngine(status_settings),
         "repair": ADetailerRepairEngine(settings.repair),
     }
-    statuses = {"idm_vton": idm_engine.status()}
+    statuses = {
+        "idm_vton": idm_status,
+        "klein_tryon_lora": klein_status,
+        "klein_bnb_4bit": klein_bnb_status,
+        "idm_klein_hybrid": _hybrid_status(idm_status, klein_status),
+        "idm_klein_hybrid_pro": _hybrid_status(idm_compile_status, klein_bnb_status),
+    }
     statuses.update(
         {
             name: engine.status() if hasattr(engine, "status") else ("available" if engine.is_available() else "missing")

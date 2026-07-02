@@ -15,10 +15,11 @@ type QualityReport = {
   };
 };
 
-const defaultTimeline = ["queued", "running", "generating", "refining", "completed"];
+const defaultTimeline = ["queued", "running", "loading_model", "generating", "refining", "completed"];
 const stageLabels: Record<string, string> = {
   queued: "Queued",
-  running: "Running",
+  running: "Preprocess",
+  loading_model: "Loading model",
   generating: "Generating",
   refining: "Refining",
   completed: "Completed"
@@ -30,13 +31,13 @@ function fallbackStages(result: TryOnResult): PipelineStage[] {
     if (result.status === "queued") {
       status = key === "queued" ? "running" : "pending";
     } else if (result.status === "running" || result.status === "cancel_requested") {
-      status = key === "generating" ? "running" : defaultTimeline.indexOf(key) < 2 ? "completed" : "pending";
+      status = key === "generating" ? "running" : defaultTimeline.indexOf(key) < 3 ? "completed" : "pending";
     } else if (result.status === "completed") {
       status = "completed";
     } else if (result.status === "cancelled") {
-      status = key === "completed" ? "cancelled" : defaultTimeline.indexOf(key) < 2 ? "completed" : "pending";
+      status = key === "completed" ? "cancelled" : defaultTimeline.indexOf(key) < 3 ? "completed" : "pending";
     } else if (result.status === "failed") {
-      status = key === "completed" ? "failed" : defaultTimeline.indexOf(key) < 3 ? "completed" : "pending";
+      status = key === "completed" ? "failed" : defaultTimeline.indexOf(key) < 4 ? "completed" : "pending";
     }
     return { key, label: stageLabels[key], status };
   });
@@ -47,8 +48,24 @@ function formatRuntime(value?: number | null) {
   return `${value.toFixed(value < 10 ? 1 : 0)}s`;
 }
 
-function stageMeta(stage: PipelineStage) {
-  if (stage.status === "running") return "Running";
+function formatElapsedSeconds(value?: number | null) {
+  if (value == null) return null;
+  return `${Math.max(0, Math.floor(value))}s`;
+}
+
+function parseTimestampMs(value?: string | null) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function stageMeta(stage: PipelineStage, nowMs: number) {
+  if (stage.status === "running") {
+    const startedAt = parseTimestampMs(stage.started_at);
+    const elapsed = startedAt == null ? null : (nowMs - startedAt) / 1000;
+    const label = stage.key === "loading_model" ? "Loading" : stage.key === "generating" ? "Generating" : "Working";
+    return `${label}${elapsed == null ? "" : ` · ${formatElapsedSeconds(elapsed)}`}`;
+  }
   if (stage.status === "pending") return "Pending";
   if (stage.status === "skipped") return "Skipped";
   if (stage.status === "failed") return "Failed";
@@ -87,6 +104,9 @@ export function ResultViewer() {
   const [copied, setCopied] = useState(false);
   const [artifactsExpanded, setArtifactsExpanded] = useState(false);
   const [debugArtifactsExpanded, setDebugArtifactsExpanded] = useState(false);
+  const [clockNowMs, setClockNowMs] = useState(() => Date.now());
+  const isLiveJob =
+    result?.status === "queued" || result?.status === "running" || result?.status === "cancel_requested";
 
   useEffect(() => {
     setQualityReport(undefined);
@@ -100,6 +120,12 @@ export function ResultViewer() {
     setArtifactsExpanded(false);
     setDebugArtifactsExpanded(false);
   }, [result?.job_id]);
+
+  useEffect(() => {
+    if (!isLiveJob) return undefined;
+    const timer = window.setInterval(() => setClockNowMs(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [isLiveJob, result?.job_id]);
 
   if (!result) {
     return <section className="result-surface empty-state">No result yet</section>;
@@ -165,7 +191,7 @@ export function ResultViewer() {
           <li className={`stage-${stage.status}`} key={stage.key}>
             <span aria-hidden="true" />
             <strong>{stage.label || stage.key}</strong>
-            <small>{stageMeta(stage)}</small>
+            <small>{stageMeta(stage, clockNowMs)}</small>
           </li>
         ))}
       </ol>

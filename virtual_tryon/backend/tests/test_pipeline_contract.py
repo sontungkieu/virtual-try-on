@@ -207,6 +207,31 @@ def test_pipeline_applies_resolution_and_step_overrides(tmp_path):
     assert '"steps": 12' in metadata
 
 
+def test_optimized_klein_request_modes_apply_runtime_presets(tmp_path):
+    settings = configure_temp_storage(load_settings(), tmp_path)
+    settings.pipeline.engine = "idm_vton"
+    storage = StorageService(settings.storage)
+    pipeline = TryOnPipeline(settings, storage)
+
+    klein_request = make_request("klein_bnb_settings")
+    klein_request.engine_mode = "klein_bnb_4bit"
+    klein_settings = pipeline._settings_for_request(klein_request)
+    assert klein_settings.pipeline.engine == "klein_tryon_lora"
+    assert klein_settings.klein_tryon_lora.device_map == "cuda"
+    assert klein_settings.klein_tryon_lora.quantization == "bnb_4bit"
+    assert klein_settings.klein_tryon_lora.quantize_components == ["transformer", "text_encoder"]
+    assert klein_settings.klein_tryon_lora.tensorrt_profile == "none"
+
+    pro_request = make_request("hybrid_pro_settings")
+    pro_request.engine_mode = "idm_klein_hybrid_pro"
+    pro_settings = pipeline._settings_for_request(pro_request)
+    assert pro_settings.pipeline.engine == "idm_klein_hybrid"
+    assert pro_settings.idm_vton.resident_worker is True
+    assert pro_settings.idm_vton.resident_worker_optimization == "torch_compile"
+    assert pro_settings.klein_tryon_lora.device_map == "cuda"
+    assert pro_settings.klein_tryon_lora.quantization == "bnb_4bit"
+
+
 def test_pipeline_real_engine_fallback_returns_failed_job(tmp_path):
     settings = configure_temp_storage(load_settings(), tmp_path)
     settings.pipeline.engine = "idm_vton"

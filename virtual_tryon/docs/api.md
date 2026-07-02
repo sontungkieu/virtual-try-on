@@ -19,6 +19,43 @@ Returns service status, detected device, and model availability.
 
 Model status strings may include detailed skip reasons. When the resident IDM-VTON worker is enabled, the `idm_vton` status also includes `resident_worker=not_started`, `running pid=...`, or an exited return code. Disabled optional engines return a lightweight disabled status instead of running local worker dependency checks. IDM-VTON is the default core API engine; CatVTON, Klein LoRA, and the ComfyUI Flux Redux bridge are benchmark or ablation paths unless explicitly selected.
 
+## POST /tryon/model/prepare
+
+Preloads the selected `engine_mode` before generation. The frontend calls this
+when the engine dropdown changes and keeps Generate disabled until the response
+is `ready`.
+
+```json
+{
+  "engine_mode": "klein_bnb_4bit"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "ready",
+  "engine": "klein_tryon_lora",
+  "engine_mode": "klein_bnb_4bit",
+  "runtime_seconds": 39.2,
+  "metadata": {
+    "resident_worker": "running pid=1234",
+    "worker": {
+      "cached": false,
+      "quantization": "bnb_4bit"
+    }
+  },
+  "message": null
+}
+```
+
+Preparing IDM releases a resident Klein worker; preparing Klein releases a
+resident IDM worker. This keeps model switching explicit on the 24 GB target
+GPU. Hybrid modes may return a `message` because IDM and Klein cannot reliably
+stay pinned together in VRAM; one phase can still load during the job and will
+show up as the `loading_model` stage.
+
 ## POST /tryon
 
 Multipart form fields:
@@ -32,7 +69,7 @@ Multipart form fields:
 - `use_refiner`: boolean, default `true`.
 - `repair_mode`: boolean, default `true`.
 - `run_mode`: optional `sync` or `async`; defaults to `configs/pipeline.yaml`.
-- `engine_mode`: optional `idm_vton`, `idm_mask_expanded`, `idm_vton_flux`, `idm_mask_expanded_flux`, `flux_redux_catvton`, `klein_lora`, or `catvton`; default is the configured core engine.
+- `engine_mode`: optional `idm_vton`, `idm_mask_expanded`, `idm_vton_flux`, `idm_mask_expanded_flux`, `flux_redux_catvton`, `klein_lora`, `klein_bnb_4bit`, `idm_klein_hybrid`, `idm_klein_hybrid_pro`, or `catvton`; default is the configured core engine.
 - `auto_prompt`: optional boolean, default `false`.
 - `testcase_id`: optional `tc1` through `tc15`; required when `auto_prompt=true`.
 - `prompt_variant`: optional `default`, `strong_remove_old_garment`, or `identity_strict`.
@@ -49,7 +86,8 @@ Response:
   "current_stage": "completed",
   "stages": [
     {"key": "queued", "label": "Queued", "status": "completed", "runtime_seconds": 0.0},
-    {"key": "running", "label": "Running", "status": "completed", "runtime_seconds": 1.2},
+    {"key": "running", "label": "Preprocess", "status": "completed", "runtime_seconds": 1.2},
+    {"key": "loading_model", "label": "Loading model", "status": "skipped", "runtime_seconds": 0.0},
     {"key": "generating", "label": "Generating", "status": "completed", "runtime_seconds": 42.5},
     {"key": "refining", "label": "Refining", "status": "skipped", "runtime_seconds": 0.0},
     {"key": "completed", "label": "Completed", "status": "completed", "runtime_seconds": 0.1}
@@ -81,7 +119,8 @@ When `run_mode=async`, `POST /tryon` returns quickly:
   "current_stage": "queued",
   "stages": [
     {"key": "queued", "label": "Queued", "status": "running"},
-    {"key": "running", "label": "Running", "status": "pending"},
+    {"key": "running", "label": "Preprocess", "status": "pending"},
+    {"key": "loading_model", "label": "Loading model", "status": "pending"},
     {"key": "generating", "label": "Generating", "status": "pending"},
     {"key": "refining", "label": "Refining", "status": "pending"},
     {"key": "completed", "label": "Completed", "status": "pending"}
@@ -99,7 +138,7 @@ Prompt behavior:
 
 - Manual prompt with `auto_prompt=false` preserves the existing API behavior.
 - `auto_prompt=true` builds an engine-specific prompt from testcase metadata.
-- `engine_mode=klein_lora` normalizes the prompt so it starts with `TRYON`.
+- `engine_mode=klein_lora`, `klein_bnb_4bit`, `idm_klein_hybrid`, and `idm_klein_hybrid_pro` normalize the prompt so it starts with `TRYON`.
 - `engine_mode=idm_vton_flux` or `idm_mask_expanded_flux` can save both core and refine prompts.
 - `engine_mode=flux_redux_catvton` uses the local ComfyUI Flux Fill + Redux + CatVTON graph as the core generator and marks the backend FLUX refiner stage as skipped.
 - Prompt artifacts are served through the same `/artifacts` route as images and reports.
@@ -138,7 +177,7 @@ writes the constrained result to `core_output.png` and `result.png`. This is
 especially important for global engines such as Klein LoRA, which do not accept
 a hard inpaint mask internally.
 
-`engine_mode=klein_lora` is experimental. It opts into the Klein Try-On LoRA adapter for that request only, requires a top garment, and uses the configured bottom-reference strategy when no bottom garment is uploaded. The default backend is local Diffusers and requires `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and the `klein-local` dependency set. The engine stops the resident IDM worker before loading Klein so VRAM is released at model switch time. If local model files, dependencies, or model access are missing, the job returns `status: failed` with `error_code: ENGINE_UNAVAILABLE` and no raw stack trace. Local placement is controlled by `TRYON_KLEIN_DEVICE_MAP`; default `cpu_offload` is safest, while `cuda` attempts to place the full pipe on GPU. On 24 GB GPUs, use `TRYON_KLEIN_DEVICE_MAP=cuda` with `TRYON_KLEIN_QUANTIZATION=bnb_4bit` and `TRYON_KLEIN_QUANTIZE_COMPONENTS=transformer,text_encoder` for the tested all-GPU mode. Optional Klein TensorRT uses `TRYON_KLEIN_TRT_PROFILE=vae_decode` and records TensorRT metadata in artifacts; transformer/full TensorRT profiles are debug-only and reject bnb-quantized transformer weights. `TRYON_KLEIN_BACKEND=fal_api` keeps the old fal.ai path and requires `FAL_KEY`.
+`engine_mode=klein_lora` is experimental. It opts into the Klein Try-On LoRA adapter for that request only, requires a top garment, and uses the configured bottom-reference strategy when no bottom garment is uploaded. The default backend is local Diffusers and requires `models/flux2-klein-9b`, `models/loras/flux-klein-tryon.safetensors`, and the `klein-local` dependency set. Local Klein runs through a resident worker; the engine stops the resident IDM worker before loading Klein so VRAM is released at model switch time. If local model files, dependencies, or model access are missing, the job returns `status: failed` with `error_code: ENGINE_UNAVAILABLE` and no raw stack trace. Local placement is controlled by `TRYON_KLEIN_DEVICE_MAP`; default `cpu_offload` is safest, while `cuda` attempts to place the full pipe on GPU. On 24 GB GPUs, `engine_mode=klein_bnb_4bit` forces the tested all-GPU mode: `device_map=cuda`, `quantization=bnb_4bit`, and `quantize_components=transformer,text_encoder`. This still loads `flux-klein-tryon.safetensors` and sets the Try-On LoRA adapter; bnb 4-bit only changes how the base Klein pipeline components are loaded. `engine_mode=idm_klein_hybrid` runs IDM first, runs Klein second, and fuses Klein detail inside the IDM delta mask. `engine_mode=idm_klein_hybrid_pro` uses the same hybrid fusion but forces IDM resident `torch_compile` plus the Klein bnb 4-bit preset. Optional Klein TensorRT uses `TRYON_KLEIN_TRT_PROFILE=vae_decode` and records TensorRT metadata in artifacts; transformer/full TensorRT profiles are debug-only and reject bnb-quantized transformer weights. `TRYON_KLEIN_BACKEND=fal_api` keeps the old fal.ai path and requires `FAL_KEY`.
 
 `engine_mode=flux_redux_catvton` is experimental. It requires ComfyUI to be
 running and reachable through `TRYON_COMFYUI_URL` or the default
@@ -207,7 +246,7 @@ Returns the stored job status. Job metadata is also written to:
 data/outputs/{job_id}/job.json
 ```
 
-`job.json` includes `queued`, `running`, `completed`, or `failed`, timestamps, clean error text, result URL, debug URLs, engine status, `current_stage`, and per-stage timings. Stages are `queued`, `running`, `generating`, `refining`, and `completed`; `refining` is marked `skipped` when refinement is disabled or unavailable.
+`job.json` includes `queued`, `running`, `completed`, or `failed`, timestamps, clean error text, result URL, debug URLs, engine status, `current_stage`, and per-stage timings. Stages are `queued`, `running`, `loading_model`, `generating`, `refining`, and `completed`; `refining` is marked `skipped` when refinement is disabled or unavailable, and `loading_model` is marked `skipped` when the selected resident worker is already warm.
 
 ## GET /tryon/history
 

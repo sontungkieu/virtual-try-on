@@ -115,10 +115,11 @@
         "idm_vton",
         "Adult non-sexual product virtual try-on. Replace only the lower innerwear region with the referenced men's underwear. Remove the original shorts, pants, briefs, and old fabric inside the mask completely. Preserve face, hair, pose, skin, upper clothing, legs outside the mask, lighting, and background.",
         2026070206,
+        "fixed",
         "http://127.0.0.1:8000",
         512,
         768,
-        8,
+        4,
         true,
         900,
         1.0
@@ -149,7 +150,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "vton_omnitry_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1/idm_vton/idm_result"
+        "vton_omnitry_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1/idm_vton/result"
       ]
     },
     {

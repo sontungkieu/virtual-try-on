@@ -2,7 +2,7 @@
   "generated_by": "scripts/comfyui_omnitry_repro.py",
   "workflow_dir": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro",
   "comfy_input_dir": "/workspace/ComfyUI/input/vton_omnitry_repro",
-  "engine_mode": "idm_klein_hybrid",
+  "engine_mode": "idm_klein_hybrid_pro",
   "width": 512,
   "height": 768,
   "steps": 4,
@@ -162,78 +162,104 @@
   "workflows": [
     {
       "case_id": "female_underwear_01_61k71bursel__ac_sl1440",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_01_61k71bursel__ac_sl1440_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_01_61k71bursel__ac_sl1440_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_01_61k71bursel__ac_sl1440_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_01_61k71bursel__ac_sl1440_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "female_underwear_02_kga1151_pk001_p6_15",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_02_kga1151_pk001_p6_15_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_02_kga1151_pk001_p6_15_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_02_kga1151_pk001_p6_15_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_02_kga1151_pk001_p6_15_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "female_underwear_03_type_01",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_03_type_01_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_03_type_01_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_03_type_01_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_03_type_01_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_1_men_underwear_04_34",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_04_34_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_04_34_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_04_34_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_04_34_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_1_men_underwear_06_sample_14",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_06_sample_14_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_06_sample_14_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_06_sample_14_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_06_sample_14_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_1_men_underwear_07_underwers",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_07_underwers_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_07_underwers_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_07_underwers_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_07_underwers_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_1_men_underwear_08_s_l1200",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_08_s_l1200_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_08_s_l1200_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_08_s_l1200_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_08_s_l1200_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_2_men_underwear_10_34",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_10_34_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_10_34_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_10_34_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_10_34_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_2_men_underwear_12_sample_14",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_12_sample_14_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_12_sample_14_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_12_sample_14_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_12_sample_14_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_2_men_underwear_13_underwers",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_13_underwers_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_13_underwers_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_13_underwers_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_13_underwers_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_2_men_underwear_14_s_l1200",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_14_s_l1200_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_14_s_l1200_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_14_s_l1200_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_14_s_l1200_idm_klein_hybrid_pro_ui.workflow.json"
     },
     {
       "case_id": "male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136",
-      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136_idm_klein_hybrid_api.json",
-      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136_idm_klein_hybrid_ui.workflow.json"
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136_idm_klein_hybrid_pro_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136_idm_klein_hybrid_pro_ui.workflow.json"
+    }
+  ],
+  "reusable_ui_workflows": [
+    {
+      "name": "backend_tryon_dropdown",
+      "engine_mode": "idm_vton",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/backend_tryon_dropdown_ui.workflow.json",
+      "notes": "One UI graph with category, engine, resolution, and step dropdowns."
+    },
+    {
+      "name": "backend_tryon_hybrid_pro",
+      "engine_mode": "idm_klein_hybrid_pro",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/backend_tryon_hybrid_pro_ui.workflow.json",
+      "notes": "IDM resident torch.compile plus Klein bnb 4-bit hybrid preset."
+    },
+    {
+      "name": "backend_tryon_expanded_mask",
+      "engine_mode": "idm_mask_expanded",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/backend_tryon_expanded_mask_ui.workflow.json",
+      "notes": "Expanded IDM mask preset for broader replacement regions."
+    },
+    {
+      "name": "backend_tryon_klein_4bit",
+      "engine_mode": "klein_bnb_4bit",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/backend_tryon_klein_4bit_ui.workflow.json",
+      "notes": "Pure local Klein LoRA bnb 4-bit preset."
     }
   ]
 }

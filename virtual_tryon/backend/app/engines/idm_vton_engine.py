@@ -285,6 +285,15 @@ def _resident_status(config: EngineConfig) -> str:
         return client.status() if client is not None else "not_started"
 
 
+def _release_klein_resident_worker() -> None:
+    try:
+        from app.engines.klein_tryon_lora_engine import stop_klein_resident_clients
+
+        stop_klein_resident_clients()
+    except Exception:
+        pass
+
+
 @dataclass(frozen=True)
 class IDMVTonRunContext:
     data_dir: Path
@@ -350,6 +359,23 @@ class IDMVTonEngine:
             raise ModelUnavailableError(
                 "IDM-VTON is not available. " + "; ".join(missing)
             )
+
+    def preload(self) -> dict[str, Any]:
+        started = time.perf_counter()
+        self.prepare()
+        _release_klein_resident_worker()
+        payload: dict[str, Any] = {
+            "status": "ready",
+            "engine": self.name,
+            "resident_worker_enabled": self.config.resident_worker,
+            "optimization": self.config.resident_worker_optimization,
+        }
+        if self.config.resident_worker:
+            client = _get_resident_client(self.config)
+            client.start()
+            payload["resident_worker"] = client.status()
+        payload["runtime_seconds"] = round(time.perf_counter() - started, 3)
+        return payload
 
     def build_dataset(self, inputs: TryOnInputs) -> IDMVTonRunContext:
         if inputs.output_dir is None:
@@ -503,6 +529,7 @@ class IDMVTonEngine:
         job_dir: Path,
         seed: int | None,
         deterministic: bool = False,
+        progress_callback: Any = None,
     ) -> str:
         request = self.build_resident_request(context, seed, deterministic)
         command_text = "resident-idm-vton-worker " + json.dumps(request, sort_keys=True, default=str)
@@ -510,6 +537,13 @@ class IDMVTonEngine:
         (job_dir / "idm_vton_worker_request.json").write_text(json.dumps(request, indent=2, default=str), encoding="utf-8")
         logger.info("Running IDM-VTON resident worker request: %s", command_text)
         client = _get_resident_client(self.config)
+        is_running = getattr(client, "is_running", lambda: True)
+        if not is_running() and progress_callback is not None:
+            progress_callback("loading_model", "running")
+        if not is_running() and hasattr(client, "start"):
+            client.start()
+            if progress_callback is not None:
+                progress_callback("loading_model", "completed")
         response = client.run(request)
         (job_dir / "idm_vton_worker_response.json").write_text(
             json.dumps(response, indent=2, default=str),
@@ -521,6 +555,7 @@ class IDMVTonEngine:
 
     def run(self, inputs: TryOnInputs) -> TryOnResult:
         start = time.perf_counter()
+        _release_klein_resident_worker()
         self.prepare()
         context = self.build_dataset(inputs)
         job_dir = inputs.output_dir or Path.cwd()
@@ -532,6 +567,7 @@ class IDMVTonEngine:
                     job_dir,
                     inputs.seed,
                     bool(inputs.extra.get("deterministic", False)),
+                    progress_callback=inputs.extra.get("progress_callback"),
                 )
                 runtime_backend = "resident_worker"
             except Exception as exc:

@@ -174,6 +174,11 @@ idm_vton:
 
 Set `TRYON_IDM_RESIDENT_WORKER=false` before starting the backend to disable the worker without editing YAML. Set `TRYON_IDM_WORKER_OPTIMIZATION=torch_compile` for an experimental compiled worker. Set `TRYON_IDM_WORKER_OPTIMIZATION=tensorrt` plus `TRYON_TRT_PROFILE=stable` or `TRYON_TRT_PROFILE=full_safe` to use Torch-TensorRT in the resident worker. `stable` compiles VAE decode only. `full_safe` compiles IDM UNet blocks, IDM UNet encoder blocks, and VAE decode with conservative partitioning; on the RTX 3090 Ti pod it completed a 512x768 4-step smoke run but measured slower than eager after warmup. With fallback enabled, a worker startup/runtime failure writes `idm_vton_resident_error.txt` and then runs the previous subprocess adapter.
 
+The web UI calls `POST /tryon/model/prepare` when the selected engine changes.
+For IDM this starts the resident worker before the user presses Generate. If the
+worker is already alive, the prepare call returns quickly and later jobs reuse
+the same in-memory model or compiled graph.
+
 ## Baseline Suite
 
 After IDM-VTON is available, preserve a fixed baseline before adding refiners:
@@ -309,6 +314,15 @@ still OOMs when only the transformer can be quantized; `bnb_4bit` over
 The worker writes `device_map`, `quantization`, quantized components, and CUDA
 peak allocation/reservation into `worker_result.json`.
 
+In the backend, local Klein is now a resident worker instead of a fresh
+subprocess per job. `POST /tryon/model/prepare` starts
+`scripts/klein_diffusers_local_worker.py --resident`, loads the selected
+base-model + LoRA + quantization + TensorRT cache key, and keeps that pipeline
+alive for later jobs. If the same key is reused, the worker reports
+`pipe_cached=true` and the `loading_model` stage is skipped. If the selected
+engine changes, the backend releases the old resident worker before loading the
+new one so the 24 GB GPU is not occupied by two large pipelines.
+
 Klein TensorRT is controlled separately from IDM-VTON:
 
 ```bash
@@ -323,10 +337,10 @@ export TRYON_KLEIN_TRT_PROFILE=full_debug
 ```
 
 On the current 24 GB pod, `vae_decode` compiled successfully with the bnb 4-bit
-all-GPU Klein setup, but the first worker run was slower than no TensorRT
-because the local Klein adapter launches a fresh subprocess per job and the
-engine is built during the first inference call. The transformer/full profiles
-are not a production path for this setup: Torch-TensorRT rejects the
+all-GPU Klein setup, but the first prepare/run can still be slow because the
+TensorRT engine is built on first use. Once the resident worker remains alive,
+later jobs reuse the in-memory pipeline and TensorRT cache. The transformer/full
+profiles are not a production path for this setup: Torch-TensorRT rejects the
 bitsandbytes UInt8 transformer graph, while unquantized full-GPU Klein has
 already OOMed on 24 GB.
 
