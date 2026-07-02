@@ -127,7 +127,7 @@ Try-on masks are anchored to a dynamic body estimate from the uploaded person im
 
 ### OmniTry API engine sweep
 
-Use `virtual_tryon/scripts/benchmark_omnitry_api.py` to run the live backend API across multiple engines on the OmniTry underwear cases. The script discovers `input_models/`, `female_undergarmentt/`, and `male_undergarment/`, schedules male and female cases, submits `/tryon` jobs, downloads artifacts, scores any available quality report, and writes resumable results under `data/outputs/omnitry_engine_sweep/`.
+Use `virtual_tryon/scripts/benchmark_omnitry_api.py` to run the live backend API across multiple engines on the OmniTry underwear cases. The script discovers person images from `input_models/` and garment product inputs from `input_undergarment/female/`, `input_undergarment/male/`, and optional bra input folders. `female_undergarmentt/` and `male_undergarment/` are treated as target/reference outputs only, not garment inputs. The sweep schedules male and female cases, submits `/tryon` jobs, downloads artifacts, scores any available quality report, and writes resumable results under `data/outputs/omnitry_engine_sweep/`.
 
 ```bash
 cd virtual_tryon
@@ -146,6 +146,28 @@ The sweep resumes from `state.json`, updates `summary.csv` and `summary.json`, a
 `runtime_seconds` is the client-observed submit-to-terminal time. The CSV also records `save_intermediates`, `backend_runtime_seconds`, per-stage runtime columns, and `poll_overhead_seconds` so backend/model time is not confused with benchmark polling delay. The default poll interval is 0.5 seconds and the script requests production-style output artifacts by default; add `--save-intermediates` when a sweep needs full mask/crop/overlay debug files.
 
 For targeted reruns after a fix, add `--case-id male_m1_male_3`, `--gender male`, or `--case-regex "male_m1"` to restrict the schedule without changing the dataset. Use `--category-override lower_body` and `--prompt "replace the shorts with adult men's boxer brief underwear"` to test alternate mask/prompt semantics on the same source images.
+
+### OmniTry ComfyUI reproduction
+
+Use `virtual_tryon/scripts/comfyui_omnitry_repro.py` to build reproducible ComfyUI flows for the same adult innerwear cases. It copies the Omnitry inputs into `/workspace/ComfyUI/input/vton_omnitry_repro/`, then writes both API prompts and UI workflows under `virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/`.
+
+```bash
+cd virtual_tryon
+uv run --active --no-sync python scripts/comfyui_omnitry_repro.py
+```
+
+Each exported case includes:
+
+```text
+<case>_idm_vton_api.json
+<case>_idm_vton_ui.workflow.json
+```
+
+The ComfyUI flow calls the local FastAPI backend, then saves the backend-generated try-on result and dynamic mask preview with fixed category, prompt, seed, resolution, and steps. This keeps ComfyUI in a separate lightweight process while IDM remains resident in the backend worker. To smoke-test the first generated case with a running ComfyUI server on port `8188`:
+
+```bash
+uv run --active --no-sync python scripts/comfyui_omnitry_repro.py --limit 1 --queue-first
+```
 
 Single-item cases run as one pass. Multi-item cases are sequential:
 

@@ -4,7 +4,11 @@ import json
 import os
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -222,6 +226,71 @@ def _write_run_artifacts(run_dir: Path, payload: dict[str, Any], result: Image.I
     (run_dir / "status.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     if result is not None:
         result.save(run_dir / "result.png")
+
+
+def _encode_png(image: Image.Image) -> bytes:
+    buffer = BytesIO()
+    image.convert("RGB").save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _multipart_post(
+    url: str,
+    fields: dict[str, str],
+    files: dict[str, tuple[str, bytes, str]],
+    timeout: int,
+) -> dict[str, Any]:
+    boundary = f"----vtonphase2{uuid.uuid4().hex}"
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"),
+                str(value).encode("utf-8"),
+                b"\r\n",
+            ]
+        )
+    for name, (filename, data, content_type) in files.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                (
+                    f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+                    f"Content-Type: {content_type}\r\n\r\n"
+                ).encode("utf-8"),
+                data,
+                b"\r\n",
+            ]
+        )
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    request = urllib.request.Request(
+        url,
+        data=b"".join(chunks),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _get_json(url: str, timeout: int) -> dict[str, Any]:
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _fetch_backend_image(api_base: str, url: str, timeout: int) -> Image.Image:
+    full_url = urllib.parse.urljoin(api_base.rstrip("/") + "/", url.lstrip("/"))
+    with urllib.request.urlopen(full_url, timeout=timeout) as response:
+        return Image.open(BytesIO(response.read())).convert("RGB")
+
+
+def _garment_upload_field(category: str) -> str:
+    if category in {"upper_body", "women_bra"}:
+        return "garment_top"
+    if category in {"lower_body", "men_underwear", "women_underwear"}:
+        return "garment_bottom"
+    return "garment_dress"
 
 
 def _ensure_parser_checkpoint_links() -> None:
@@ -1372,6 +1441,154 @@ class VTONPhase2SCHPSAMMask:
         )
 
 
+class VTONPhase2BackendTryOnAPI:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "person_image": ("IMAGE",),
+                "garment_image": ("IMAGE",),
+                "category": (
+                    [
+                        "upper_body",
+                        "lower_body",
+                        "dress",
+                        "full_outfit",
+                        "men_underwear",
+                        "women_underwear",
+                        "women_bra",
+                    ],
+                    {"default": "women_underwear"},
+                ),
+                "engine_mode": (
+                    ["idm_vton", "idm_mask_expanded", "idm_vton_flux", "idm_mask_expanded_flux", "klein_lora", "catvton"],
+                    {"default": "idm_vton"},
+                ),
+                "prompt": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": (
+                            "Adult non-sexual virtual try-on. Replace only the target garment region with the "
+                            "reference garment. Preserve identity, pose, skin, lighting, and background."
+                        ),
+                    },
+                ),
+                "seed": ("INT", {"default": 2026070201, "min": 0, "max": 2147483647}),
+                "api_base": ("STRING", {"default": "http://127.0.0.1:8000"}),
+                "output_width": ("INT", {"default": 512, "min": 256, "max": 1536, "step": 8}),
+                "output_height": ("INT", {"default": 768, "min": 256, "max": 2048, "step": 8}),
+                "steps": ("INT", {"default": 8, "min": 1, "max": 64, "step": 1}),
+                "deterministic": ("BOOLEAN", {"default": True}),
+                "timeout_s": ("INT", {"default": 900, "min": 30, "max": 7200, "step": 30}),
+                "poll_interval_s": ("FLOAT", {"default": 1.0, "min": 0.2, "max": 10.0, "step": 0.1}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "IMAGE", "STRING")
+    RETURN_NAMES = ("result_image", "mask_preview", "status")
+    FUNCTION = "run"
+    CATEGORY = "VTON Phase2/API"
+
+    def run(
+        self,
+        person_image,
+        garment_image,
+        category: str,
+        engine_mode: str,
+        prompt: str,
+        seed: int,
+        api_base: str,
+        output_width: int,
+        output_height: int,
+        steps: int,
+        deterministic: bool,
+        timeout_s: int,
+        poll_interval_s: float,
+    ):
+        api_base = api_base.rstrip("/")
+        garment_field = _garment_upload_field(category)
+        started = time.perf_counter()
+        fields = {
+            "category": category,
+            "prompt": prompt,
+            "use_refiner": str(engine_mode in {"idm_vton_flux", "idm_mask_expanded_flux"}).lower(),
+            "repair_mode": "false",
+            "run_mode": "async",
+            "engine_mode": engine_mode,
+            "seed": str(int(seed)),
+            "deterministic": str(bool(deterministic)).lower(),
+            "output_width": str(int(output_width)),
+            "output_height": str(int(output_height)),
+            "steps": str(int(steps)),
+            "save_intermediates": "true",
+        }
+        files = {
+            "person_image": ("person.png", _encode_png(_tensor_to_pil(person_image)), "image/png"),
+            garment_field: ("garment.png", _encode_png(_tensor_to_pil(garment_image)), "image/png"),
+        }
+
+        try:
+            created = _multipart_post(f"{api_base}/tryon", fields, files, timeout=30)
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Backend API is unreachable at {api_base}: {exc}") from exc
+
+        job_id = created.get("job_id")
+        if not job_id:
+            raise RuntimeError(f"Backend did not return a job_id: {created}")
+
+        deadline = time.time() + int(timeout_s)
+        status = created
+        while time.time() < deadline:
+            status = _get_json(f"{api_base}/tryon/{job_id}", timeout=30)
+            if status.get("status") in {"completed", "failed", "cancelled"}:
+                break
+            time.sleep(float(poll_interval_s))
+        else:
+            raise TimeoutError(f"Backend job {job_id} did not finish in {timeout_s}s.")
+
+        if status.get("status") != "completed":
+            raise RuntimeError(f"Backend job {job_id} ended as {status.get('status')}: {status.get('error')}")
+
+        result_url = status.get("result_url")
+        if not result_url:
+            raise RuntimeError(f"Backend job {job_id} completed without result_url.")
+        result = _fetch_backend_image(api_base, result_url, timeout=60)
+
+        debug = status.get("debug") or {}
+        mask_url = debug.get("mask_url")
+        mask_urls = debug.get("mask_urls") or []
+        if not mask_url and mask_urls:
+            mask_url = mask_urls[0]
+        if not mask_url:
+            mask_url = debug.get("refine_mask_url")
+        if mask_url:
+            mask_preview = _fetch_backend_image(api_base, mask_url, timeout=60)
+        else:
+            mask_preview = Image.new("RGB", result.size, "black")
+
+        payload = {
+            "node": "VTON Phase2 - Backend Try-On API",
+            "job_id": job_id,
+            "status": status.get("status"),
+            "api_base": api_base,
+            "category": category,
+            "engine_mode": engine_mode,
+            "output_width": int(output_width),
+            "output_height": int(output_height),
+            "steps": int(steps),
+            "seed": int(seed),
+            "deterministic": bool(deterministic),
+            "result_url": result_url,
+            "mask_url": mask_url,
+            "runtime_seconds": round(time.perf_counter() - started, 3),
+            "backend_runtime_seconds": status.get("runtime_seconds"),
+            "stages": status.get("stages", []),
+            "engine_status": status.get("engine_status", {}),
+        }
+        return (_pil_to_tensor(result), _pil_to_tensor(mask_preview), json.dumps(payload, indent=2, ensure_ascii=False))
+
+
 class VTONPhase2IDMRun:
     @classmethod
     def INPUT_TYPES(cls):
@@ -1379,7 +1596,18 @@ class VTONPhase2IDMRun:
             "required": {
                 "person_image": ("IMAGE",),
                 "garment_image": ("IMAGE",),
-                "category": (["upper_body", "lower_body", "dress", "full_outfit"], {"default": "upper_body"}),
+                "category": (
+                    [
+                        "upper_body",
+                        "lower_body",
+                        "dress",
+                        "full_outfit",
+                        "men_underwear",
+                        "women_underwear",
+                        "women_bra",
+                    ],
+                    {"default": "upper_body"},
+                ),
                 "mask_expanded": ("BOOLEAN", {"default": False}),
                 "prompt": (
                     "STRING",
@@ -1392,7 +1620,18 @@ class VTONPhase2IDMRun:
                     },
                 ),
                 "seed": ("INT", {"default": 4242, "min": 0, "max": 2147483647}),
-            }
+            },
+            "optional": {
+                "engine_mode": (
+                    ["auto", "idm_vton", "idm_mask_expanded", "idm_vton_flux", "idm_mask_expanded_flux"],
+                    {"default": "auto"},
+                ),
+                "output_width": ("INT", {"default": 512, "min": 256, "max": 1536, "step": 8}),
+                "output_height": ("INT", {"default": 768, "min": 256, "max": 2048, "step": 8}),
+                "steps": ("INT", {"default": 8, "min": 1, "max": 64, "step": 1}),
+                "deterministic": ("BOOLEAN", {"default": True}),
+                "save_intermediates": ("BOOLEAN", {"default": True}),
+            },
         }
 
     RETURN_TYPES = ("IMAGE", "STRING")
@@ -1400,7 +1639,21 @@ class VTONPhase2IDMRun:
     FUNCTION = "run"
     CATEGORY = "VTON Phase2"
 
-    def run(self, person_image, garment_image, category: str, mask_expanded: bool, prompt: str, seed: int):
+    def run(
+        self,
+        person_image,
+        garment_image,
+        category: str,
+        mask_expanded: bool,
+        prompt: str,
+        seed: int,
+        engine_mode: str = "auto",
+        output_width: int = 512,
+        output_height: int = 768,
+        steps: int = 8,
+        deterministic: bool = True,
+        save_intermediates: bool = True,
+    ):
         _ensure_project_imports()
         from app.core.config import load_settings
         from app.preprocessing.image_loader import load_image_from_path
@@ -1418,21 +1671,31 @@ class VTONPhase2IDMRun:
         settings = load_settings().model_copy(deep=True)
         settings.storage.outputs_dir = OUTPUT_ROOT
         settings.pipeline.engine = "idm_vton"
+        settings.pipeline.save_intermediates = bool(save_intermediates)
         settings.mask_experiments.upper_body_expand_hem.enabled = bool(mask_expanded)
 
         garment = load_image_from_path(garment_path, max_side=settings.image.max_side)
+        resolved_engine_mode = engine_mode
+        if resolved_engine_mode == "auto":
+            resolved_engine_mode = "idm_mask_expanded" if mask_expanded else "idm_vton"
+        uses_refiner = resolved_engine_mode in {"idm_vton_flux", "idm_mask_expanded_flux"}
         request = PipelineRequest(
             job_id=run_id,
             person_image=load_image_from_path(person_path, max_side=settings.image.max_side),
-            garment_top=garment if category == "upper_body" else None,
-            garment_bottom=garment if category == "lower_body" else None,
+            garment_top=garment if category in {"upper_body", "women_bra"} else None,
+            garment_bottom=garment if category in {"lower_body", "men_underwear", "women_underwear"} else None,
             garment_dress=garment if category in {"dress", "full_outfit"} else None,
             category=category,  # type: ignore[arg-type]
             prompt=prompt,
-            use_refiner=False,
+            use_refiner=uses_refiner,
             repair_mode=False,
             seed=int(seed),
-            engine_mode="idm_mask_expanded" if mask_expanded else "idm_vton",
+            deterministic=bool(deterministic),
+            engine_mode=resolved_engine_mode,
+            output_width=int(output_width),
+            output_height=int(output_height),
+            steps=int(steps),
+            save_intermediates=bool(save_intermediates),
         )
         started = time.perf_counter()
         response = TryOnPipeline(settings, StorageService(settings.storage)).run(request)
@@ -1445,6 +1708,13 @@ class VTONPhase2IDMRun:
             "engine": "idm_vton",
             "mask_expanded": bool(mask_expanded),
             "category": category,
+            "engine_mode": resolved_engine_mode,
+            "use_refiner": uses_refiner,
+            "output_width": int(output_width),
+            "output_height": int(output_height),
+            "steps": int(steps),
+            "seed": int(seed),
+            "deterministic": bool(deterministic),
             "runtime_seconds": round(time.perf_counter() - started, 3),
             "result_path": str(result_path),
             "run_dir": str(OUTPUT_ROOT / run_id),
@@ -1475,7 +1745,31 @@ NODE_CLASS_MAPPINGS = {
     "VTONPhase2ExtractFittedCanvasRegion": VTONPhase2ExtractFittedCanvasRegion,
     "VTONPhase2TryOnDebugSheet": VTONPhase2TryOnDebugSheet,
     "VTONPhase2SCHPSAMMask": VTONPhase2SCHPSAMMask,
+    "VTONPhase2BackendTryOnAPI": VTONPhase2BackendTryOnAPI,
     "VTONPhase2IDMRun": VTONPhase2IDMRun,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "VTONPhase2KleinFitCanvas": "VTON Phase2 - Klein Fit Canvas",
+    "VTONPhase2KleinBottomCrop": "VTON Phase2 - Klein Bottom Preserve Crop",
+    "VTONPhase2KleinPromptBuilder": "VTON Phase2 - Klein Prompt Builder",
+    "VTONPhase2KleinLoadBaseModel": "VTON Phase2 - Load FLUX.2 Klein 9B",
+    "VTONPhase2KleinLoadTryOnLoRA": "VTON Phase2 - Load Klein Try-On LoRA",
+    "VTONPhase2KleinSamplerDetailed": "VTON Phase2 - Klein Detailed Sampler",
+    "VTONPhase2KleinReferenceSet": "VTON Phase2 - Klein Reference Set",
+    "VTONPhase2KleinSampler": "VTON Phase2 - Klein Local Sampler",
+    "VTONPhase2MaskComposite": "VTON Phase2 - Masked Candidate Composite",
+    "VTONPhase2LocalSeamRepair": "VTON Phase2 - Local Seam Repair",
+    "VTONPhase2MaskPreviewImage": "VTON Phase2 - Mask Preview Image",
+    "VTONPhase2MaskMorphology": "VTON Phase2 - Mask Morphology",
+    "VTONPhase2MaskBBoxCrop": "VTON Phase2 - Mask BBox Crop",
+    "VTONPhase2MaskedPasteBack": "VTON Phase2 - Masked Paste Back",
+    "VTONPhase2FitCanvasWithMeta": "VTON Phase2 - Fit Canvas With Meta",
+    "VTONPhase2ExtractFittedCanvasRegion": "VTON Phase2 - Extract Fitted Canvas Region",
+    "VTONPhase2TryOnDebugSheet": "VTON Phase2 - Try-On Debug Sheet",
+    "VTONPhase2SCHPSAMMask": "VTON Phase2 - SCHP/SAM Mask",
+    "VTONPhase2BackendTryOnAPI": "VTON Phase2 - Backend Try-On API",
+    "VTONPhase2IDMRun": "VTON Phase2 - IDM / IDM Expanded",
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {

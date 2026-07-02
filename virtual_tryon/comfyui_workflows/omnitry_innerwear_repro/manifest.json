@@ -1,0 +1,239 @@
+{
+  "generated_by": "scripts/comfyui_omnitry_repro.py",
+  "workflow_dir": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro",
+  "comfy_input_dir": "/workspace/ComfyUI/input/vton_omnitry_repro",
+  "engine_mode": "idm_vton",
+  "width": 512,
+  "height": 768,
+  "steps": 8,
+  "case_count": 15,
+  "rows": [
+    {
+      "case_id": "female_underwear_01_61k71bursel__ac_sl1440",
+      "category": "women_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/female_underwear_01_61k71bursel__ac_sl1440_person.jpg",
+      "garment_image": "vton_omnitry_repro/female_underwear_01_61k71bursel__ac_sl1440_garment.jpg",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/female_model.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/female/61K71burseL._AC_SL1440_.jpg",
+      "seed": "2026070202"
+    },
+    {
+      "case_id": "female_underwear_02_kga1151_pk001_p6_15",
+      "category": "women_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/female_underwear_02_kga1151_pk001_p6_15_person.jpg",
+      "garment_image": "vton_omnitry_repro/female_underwear_02_kga1151_pk001_p6_15_garment.webp",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/female_model.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/female/KGA1151-PK001_P6_15.webp",
+      "seed": "2026070203"
+    },
+    {
+      "case_id": "female_underwear_03_type_01",
+      "category": "women_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/female_underwear_03_type_01_person.jpg",
+      "garment_image": "vton_omnitry_repro/female_underwear_03_type_01_garment.png",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/female_model.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/female/Type 01.png",
+      "seed": "2026070204"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_04_34",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_1_men_underwear_04_34_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_1_men_underwear_04_34_garment.jpg",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_1.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/34.jpg",
+      "seed": "2026070205"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1_garment.webp",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_1.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/NY01_NVWHT_0105_S123_JKY_1.webp",
+      "seed": "2026070206"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_06_sample_14",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_1_men_underwear_06_sample_14_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_1_men_underwear_06_sample_14_garment.png",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_1.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/Sample 14.png",
+      "seed": "2026070207"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_07_underwers",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_1_men_underwear_07_underwers_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_1_men_underwear_07_underwers_garment.webp",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_1.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/UNDERWERS.webp",
+      "seed": "2026070208"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_08_s_l1200",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_1_men_underwear_08_s_l1200_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_1_men_underwear_08_s_l1200_garment.png",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_1.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/s-l1200.png",
+      "seed": "2026070209"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136_garment.jpg",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_1.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/superman-logo-sport-briefs-6__67136.jpg",
+      "seed": "2026070210"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_10_34",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_2_men_underwear_10_34_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_2_men_underwear_10_34_garment.jpg",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_2.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/34.jpg",
+      "seed": "2026070211"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1_garment.webp",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_2.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/NY01_NVWHT_0105_S123_JKY_1.webp",
+      "seed": "2026070212"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_12_sample_14",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_2_men_underwear_12_sample_14_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_2_men_underwear_12_sample_14_garment.png",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_2.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/Sample 14.png",
+      "seed": "2026070213"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_13_underwers",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_2_men_underwear_13_underwers_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_2_men_underwear_13_underwers_garment.webp",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_2.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/UNDERWERS.webp",
+      "seed": "2026070214"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_14_s_l1200",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_2_men_underwear_14_s_l1200_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_2_men_underwear_14_s_l1200_garment.png",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_2.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/s-l1200.png",
+      "seed": "2026070215"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136",
+      "category": "men_underwear",
+      "target_region": "lower",
+      "person_image": "vton_omnitry_repro/male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136_person.jpg",
+      "garment_image": "vton_omnitry_repro/male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136_garment.jpg",
+      "person_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_models/male_model_2.jpg",
+      "garment_source": "/workspace/Project_Phase2/virtual_tryon/data/inputs/omnitry/output_omnitry/input_undergarment/male/superman-logo-sport-briefs-6__67136.jpg",
+      "seed": "2026070216"
+    }
+  ],
+  "workflows": [
+    {
+      "case_id": "female_underwear_01_61k71bursel__ac_sl1440",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_01_61k71bursel__ac_sl1440_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_01_61k71bursel__ac_sl1440_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "female_underwear_02_kga1151_pk001_p6_15",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_02_kga1151_pk001_p6_15_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_02_kga1151_pk001_p6_15_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "female_underwear_03_type_01",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_03_type_01_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/female_underwear_03_type_01_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_04_34",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_04_34_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_04_34_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_05_ny01_nvwht_0105_s123_jky_1_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_06_sample_14",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_06_sample_14_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_06_sample_14_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_07_underwers",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_07_underwers_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_07_underwers_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_08_s_l1200",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_08_s_l1200_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_08_s_l1200_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_1_men_underwear_09_superman_logo_sport_briefs_6__67136_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_10_34",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_10_34_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_10_34_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_11_ny01_nvwht_0105_s123_jky_1_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_12_sample_14",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_12_sample_14_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_12_sample_14_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_13_underwers",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_13_underwers_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_13_underwers_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_14_s_l1200",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_14_s_l1200_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_14_s_l1200_idm_vton_ui.workflow.json"
+    },
+    {
+      "case_id": "male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136",
+      "api": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136_idm_vton_api.json",
+      "ui": "/workspace/Project_Phase2/virtual_tryon/comfyui_workflows/omnitry_innerwear_repro/male_model_2_men_underwear_15_superman_logo_sport_briefs_6__67136_idm_vton_ui.workflow.json"
+    }
+  ]
+}
