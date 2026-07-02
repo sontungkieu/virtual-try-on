@@ -46,6 +46,9 @@ Frontend phụ trách:
 - Hiển thị stage, timing, output, masks, artifacts và history.
 
 Frontend chạy async: sau khi bấm Generate, UI nhận `job_id`, rồi poll backend để cập nhật `queued`, `running`, `generating`, `refining`, `completed`.
+Đồng hồ trên nút Generate đếm theo stage đang active, ví dụ `Loading model`
+hoặc `Generating`, không đếm tổng wall-clock từ lúc bấm nút. Tổng thời gian
+job vẫn xem trong history và stage timing.
 
 ### Backend
 
@@ -159,6 +162,8 @@ completed
 - `completed`: lưu kết quả cuối, manifest, history.
 
 Mỗi stage có `runtime_seconds` trong `job.json`.
+Nếu một stage được active lại sau stage khác, backend reset lại `started_at`
+của stage đó để tránh trường hợp `generating` bị tính cả thời gian load model.
 
 ## 4. Category và input slots
 

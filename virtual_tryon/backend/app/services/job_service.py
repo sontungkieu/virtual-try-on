@@ -103,9 +103,11 @@ class JobService:
             job.stages.append(stage)
 
         now = when or cls._now()
+        was_current_stage = job.current_stage == key
         stage.status = status
         if status == "running":
-            stage.started_at = stage.started_at or now
+            if stage.started_at is None or not was_current_stage:
+                stage.started_at = now
             stage.finished_at = None
             stage.runtime_seconds = None
             job.current_stage = key

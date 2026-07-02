@@ -21,9 +21,32 @@ const JOB_POLL_INTERVAL_MS = 500;
 const JOB_TIMER_INTERVAL_MS = 250;
 const DEFAULT_ENGINE_MODE = "klein_bnb_4bit" as const;
 
+function parseTimestampMs(value?: string | null) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function formatElapsedSeconds(value?: number | null) {
   if (value == null) return null;
   return `${Math.max(0, Math.floor(value))}s`;
+}
+
+function activeStageElapsedSeconds(
+  state: ReturnType<typeof useTryOnStore.getState>,
+  nowMs: number,
+  fallbackStartedAtMs: number | null
+) {
+  if (!state.loading) return null;
+  const result = state.result;
+  const activeKey =
+    result?.current_stage ??
+    result?.stages?.find((stage) => stage.status === "running")?.key ??
+    result?.status;
+  const activeStage = result?.stages?.find((stage) => stage.key === activeKey);
+  const stageStartedAt = parseTimestampMs(activeStage?.started_at);
+  if (stageStartedAt != null) return (nowMs - stageStartedAt) / 1000;
+  return fallbackStartedAtMs == null ? null : (nowMs - fallbackStartedAtMs) / 1000;
 }
 
 function generateButtonLabel(state: ReturnType<typeof useTryOnStore.getState>, elapsedSeconds?: number | null) {
@@ -70,8 +93,7 @@ function App() {
   const setField = state.setField;
   const resolutionValue = `${state.outputWidth}x${state.outputHeight}`;
   const isPresetResolution = resolutionPresets.some((item) => `${item.width}x${item.height}` === resolutionValue);
-  const liveElapsedSeconds =
-    state.loading && jobStartedAtMs != null ? (clockNowMs - jobStartedAtMs) / 1000 : null;
+  const activeElapsedSeconds = activeStageElapsedSeconds(state, clockNowMs, jobStartedAtMs);
   const modelElapsedSeconds =
     state.modelPreparing && modelStartedAtMs != null ? (clockNowMs - modelStartedAtMs) / 1000 : null;
   const selectedEngineToken = state.engineMode || null;
@@ -295,9 +317,9 @@ function App() {
   const generateLabel = state.modelPreparing
     ? `Loading model${modelElapsedSeconds == null ? "" : ` · ${formatElapsedSeconds(modelElapsedSeconds)}`}`
     : isModelReady
-      ? generateButtonLabel(state, liveElapsedSeconds)
+      ? generateButtonLabel(state, activeElapsedSeconds)
       : "Load model first";
-  const toolbarStatus = state.loading ? generateButtonLabel(state, liveElapsedSeconds) : modelStatusText;
+  const toolbarStatus = state.loading ? generateButtonLabel(state, activeElapsedSeconds) : modelStatusText;
   const disableGenerate = state.loading || state.modelPreparing || !isModelReady;
 
   return (

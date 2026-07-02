@@ -33,6 +33,7 @@ Do not write API keys into tracked files or logs.
 - `/tryon` accepts per-job `output_width`, `output_height`, `steps`, `seed`, and `deterministic` overrides for fast preview versus reproducible runs. Deterministic mode is best-effort because CUDA/TensorRT kernels may still be non-bit-exact.
 - `/health` reports `active_engine_mode`, `loaded_engine_mode`, and `default_engine_mode`. The web UI uses this on startup to select the already loaded resident model instead of immediately switching models; if none is loaded, it defaults to `klein_bnb_4bit`.
 - `/tryon/model/prepare` preloads the selected `engine_mode` before generation. The web UI disables Generate while this request is loading so model startup is not hidden inside the generation timer.
+- During generation, the web UI timer follows the active pipeline stage such as `Loading model` or `Generating` instead of counting only from the original button click.
 - IDM-VTON uses the resident worker when `idm_vton.resident_worker=true`, keeping the model loaded between jobs and falling back to the subprocess runner if configured. `idm_vton.resident_worker_optimization` selects `eager`, `torch_compile`, or `tensorrt`; TensorRT supports `TRYON_TRT_PROFILE=stable` and the tested full block-wise profile `TRYON_TRT_PROFILE=full_safe`.
 - Missing core checkpoints return a clear failed job message.
 - Mock engine is available for tests and pipeline validation via `TRYON_ENGINE=mock`.

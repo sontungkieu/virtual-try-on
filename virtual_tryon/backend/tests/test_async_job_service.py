@@ -5,6 +5,7 @@ import json
 from PIL import Image
 
 from app.core.config import load_settings
+from app.schemas.tryon import TryOnStatusResponse
 from app.services.job_service import JobService
 from app.services.storage_service import StorageService
 from app.services.tryon_pipeline import PipelineRequest, TryOnPipeline
@@ -83,3 +84,17 @@ def test_async_job_service_failed_job_has_clean_error(tmp_path):
     assert failed.error
     assert "Traceback" not in failed.error
     assert (settings.storage.outputs_dir / "async_fail" / "job.json").exists()
+
+
+def test_reactivated_stage_resets_started_at():
+    job = TryOnStatusResponse(job_id="stage_reset", status="running")
+
+    JobService._apply_stage(job, "generating", "running", when="2026-07-02T00:00:00+00:00")
+    JobService._apply_stage(job, "loading_model", "running", when="2026-07-02T00:00:05+00:00")
+    JobService._apply_stage(job, "loading_model", "completed", when="2026-07-02T00:00:08+00:00")
+    JobService._apply_stage(job, "generating", "running", when="2026-07-02T00:00:09+00:00")
+
+    stages = {stage.key: stage for stage in job.stages}
+    assert job.current_stage == "generating"
+    assert stages["generating"].started_at == "2026-07-02T00:00:09+00:00"
+    assert stages["generating"].runtime_seconds is None
