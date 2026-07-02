@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 KLEIN_BNB_4BIT_ENGINE_MODES = {"klein_bnb_4bit", "idm_klein_hybrid_pro"}
 KLEIN_ENGINE_MODES = {"klein_lora", "klein_bnb_4bit"}
 HYBRID_ENGINE_MODES = {"idm_klein_hybrid", "idm_klein_hybrid_pro"}
-NO_REFINER_ENGINE_MODES = {"flux_redux_catvton", *HYBRID_ENGINE_MODES}
+NO_REFINER_ENGINE_MODES = {*HYBRID_ENGINE_MODES}
 MASK_CACHE_VERSION = "mask-v6-innerwear-hand-protection"
 MASK_CACHE_IMAGE_FILES = {
     "raw_mask": ("raw_mask.png", "L"),
@@ -68,12 +68,14 @@ MASK_CACHE_IMAGE_FILES = {
 INNERWEAR_DEFAULT_PROMPTS = {
     "men_underwear": (
         "replace the masked lower-body clothing with the adult men's underwear from the reference garment; "
-        "remove original shorts, pants, briefs, and old fabric patterns inside the target mask completely; "
+        "remove original shorts, pants, briefs, waistband, side straps, leg openings, colors, logos, and old fabric patterns inside the target mask completely; "
+        "do not preserve the old underwear even when its color is similar to the reference; "
         "preserve face, pose, body shape, upper-body clothing, legs outside the target region, and background"
     ),
     "women_underwear": (
         "replace the masked lower-body clothing with the adult women's underwear from the reference garment; "
-        "remove original shorts, pants, briefs, and old fabric patterns inside the target mask completely; "
+        "remove original shorts, pants, briefs, waistband, side straps, leg openings, colors, logos, and old fabric patterns inside the target mask completely; "
+        "do not preserve the old underwear even when its color is similar to the reference; "
         "preserve face, pose, body shape, upper-body clothing, legs outside the target region, and background"
     ),
     "women_bra": (
@@ -177,8 +179,6 @@ class TryOnPipeline:
             mode_settings.mask_experiments.upper_body_expand_hem.enabled = True
             mode_settings.flux_refiner.enabled = True
             mode_settings.refinement.enabled = True
-        elif mode == "flux_redux_catvton":
-            mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "comfyui_flux_redux"
         elif mode in KLEIN_ENGINE_MODES:
             mode_settings.pipeline.engine = "klein_tryon_lora"
             mode_settings.klein_tryon_lora.enabled = True
@@ -236,7 +236,6 @@ class TryOnPipeline:
             "idm_mask_expanded": EngineMode.IDM_MASK_EXPANDED,
             "idm_vton_flux": EngineMode.IDM_MASK_EXPANDED_FLUX,
             "idm_mask_expanded_flux": EngineMode.IDM_MASK_EXPANDED_FLUX,
-            "flux_redux_catvton": EngineMode.IDM_MASK_EXPANDED_FLUX,
             "klein_lora": EngineMode.KLEIN_LORA,
             "klein_bnb_4bit": EngineMode.KLEIN_LORA,
             "idm_klein_hybrid": EngineMode.KLEIN_LORA,
@@ -739,7 +738,6 @@ class TryOnPipeline:
         engine_status = {
             "idm_vton": "success" if core_engine_name in {"idm_vton", "mock", "idm_klein_hybrid"} else "skipped",
             "flux_refiner": "skipped",
-            "comfyui_flux_redux": "success" if core_engine_name == "comfyui_flux_redux" else "skipped",
             "catvton": "success" if core_engine_name == "catvton" else "skipped",
             "klein_lora": "success" if core_engine_name in {"klein_tryon_lora", "idm_klein_hybrid"} else "skipped",
             "klein_bnb_4bit": (

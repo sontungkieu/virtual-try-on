@@ -710,9 +710,12 @@ class KleinTryOnLoraEngine:
         explicit_top = inputs.extra.get("garment_top_image") or inputs.extra.get("top_image")
         if explicit_top is not None:
             top_image = explicit_top.convert("RGB")
+        elif inputs.category in {"men_underwear", "women_underwear"} and inputs.agnostic_image is not None:
+            top_image = inputs.agnostic_image.convert("RGB")
+            warnings.append("top reference uses agnostic person image for underwear-bottom preservation")
         elif inputs.category in {"men_underwear", "women_underwear"}:
             top_image = person.copy()
-            warnings.append("top reference copied from person image for underwear-bottom preservation")
+            warnings.append("top reference copied from person image because agnostic image is unavailable")
         else:
             top_image = inputs.garment_image.convert("RGB")
         bottom_image = inputs.extra.get("garment_bottom_image") or inputs.extra.get("bottom_image")

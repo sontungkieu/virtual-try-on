@@ -84,7 +84,6 @@ def model_statuses(settings: Settings) -> dict[str, str]:
     klein_bnb_status = _preset_status(klein_status, "device_map=cuda; quantization=bnb_4bit")
     engines = {
         "flux_refiner": FluxRefinerEngine(settings.flux_refiner),
-        "comfyui_flux_redux": ComfyUIFluxReduxEngine(settings),
         "catvton": CatVTonEngine(settings.catvton),
         "repair": ADetailerRepairEngine(settings.repair),
     }

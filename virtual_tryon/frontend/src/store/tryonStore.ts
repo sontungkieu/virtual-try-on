@@ -14,7 +14,6 @@ export type EngineMode =
   | "idm_vton_flux"
   | "idm_mask_expanded"
   | "idm_mask_expanded_flux"
-  | "flux_redux_catvton"
   | "klein_lora"
   | "klein_bnb_4bit"
   | "idm_klein_hybrid"

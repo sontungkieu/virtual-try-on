@@ -85,7 +85,9 @@ def build_klein_tryon_prompt(
         )
     elif category in {"men_underwear", "women_underwear"}:
         body = (
-            f"{person}. Replace only the adult underwear bottom region with {bottom} shown in the reference image. "
+            f"{person}. Replace only the adult underwear bottom region with exactly {bottom} shown in the reference image. "
+            "Remove the original underwear, waistband, side straps, leg openings, color, logo, and fabric pattern inside the target region completely, even if the original garment color is similar. "
+            "Do not copy the old underwear from the person reference. "
             "Preserve the person's face, hair, hands, body shape, upper outfit, legs outside the target region, pose, and background."
         )
     elif category == "women_bra":

@@ -357,8 +357,9 @@ def test_klein_lora_bottom_crop_from_person(monkeypatch, tmp_path):
     assert status["bottom_source"] == "auto_cropped_from_person"
 
 
-def test_klein_lora_underwear_uses_person_as_top_preserve_reference(tmp_path):
+def test_klein_lora_underwear_uses_agnostic_top_preserve_reference(tmp_path):
     person = Image.new("RGB", (64, 96), (180, 160, 140))
+    agnostic = Image.new("RGB", (64, 96), (235, 235, 235))
     bottom = Image.new("RGB", (64, 96), (12, 10, 8))
     output_dir = tmp_path / "refs"
     output_dir.mkdir()
@@ -370,6 +371,7 @@ def test_klein_lora_underwear_uses_person_as_top_preserve_reference(tmp_path):
             garment_image=bottom,
             category="women_underwear",
             agnostic_mask=Image.new("L", person.size, 255),
+            agnostic_image=agnostic,
             prompt=None,
             seed=42,
             output_dir=output_dir,
@@ -378,10 +380,10 @@ def test_klein_lora_underwear_uses_person_as_top_preserve_reference(tmp_path):
         output_dir,
     )
 
-    assert refs.top_image.getpixel((0, 0)) == person.getpixel((0, 0))
+    assert refs.top_image.getpixel((0, 0)) == agnostic.getpixel((0, 0))
     assert refs.bottom_image is not None
     assert refs.bottom_image.getpixel((0, 0)) == bottom.getpixel((0, 0))
-    assert any("underwear-bottom preservation" in warning for warning in refs.warnings)
+    assert any("agnostic person image" in warning for warning in refs.warnings)
 
 
 def test_klein_lora_sanitizes_request_response(monkeypatch, tmp_path):

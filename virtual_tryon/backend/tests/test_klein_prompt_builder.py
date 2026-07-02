@@ -53,6 +53,8 @@ def test_klein_prompt_innerwear_bottom_targets_only_underwear_region():
         "men_underwear",
     )
     assert "Replace only the adult underwear bottom region" in prompt
+    assert "Remove the original underwear, waistband, side straps" in prompt
+    assert "Do not copy the old underwear" in prompt
     assert "legs outside the target region" in prompt
 
 

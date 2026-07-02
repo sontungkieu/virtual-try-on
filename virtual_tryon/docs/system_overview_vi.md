@@ -8,7 +8,7 @@ Hệ thống không chỉ gọi một model sinh ảnh. Nó là một pipeline g
 
 1. Frontend React để upload ảnh người, ảnh trang phục, chọn category, engine, seed, resolution và steps.
 2. Backend FastAPI để nhận job, tạo mask động, chọn engine, chạy model, lưu artifacts và trả kết quả.
-3. Các engine: IDM-VTON, Klein LoRA local, IDM + Klein hybrid, Flux Redux + CatVTON qua ComfyUI, và một số baseline/experimental mode.
+3. Các engine production: IDM-VTON, Klein LoRA local, IDM + Klein hybrid, và một số baseline/experimental mode. ComfyUI workflow dùng để reproduce/batch riêng qua custom node.
 4. ComfyUI custom node để reproduce workflow bằng graph, nhưng node vẫn gọi lại backend project để dùng đúng pipeline đang test.
 5. Mỗi job có thư mục riêng trong `data/outputs/{job_id}` để kiểm tra input, mask, prompt, raw output, result, metadata và timing.
 
@@ -410,22 +410,22 @@ Nhận xét case này:
 - Hybrid final không bị đen vùng da xung quanh.
 - Mask preview rộng hơn vùng thay thật, nhưng delta mask hybrid co lại đúng vùng underwear.
 
-### Flux Redux + CatVTON qua ComfyUI
+### ComfyUI reproduce workflow
 
-Mode này gửi mask động, person và garment reference qua local ComfyUI graph.
+ComfyUI không còn là `engine_mode` production trên UI/API. Workflow ComfyUI hiện dùng custom node gọi lại backend để reproduce đúng pipeline đã chọn.
 
 Ưu điểm:
 
 - Reproduce được workflow bằng ComfyUI.
-- Có thể kết hợp Flux Fill/Redux với CatVTON.
+- Có thể lưu graph demo/batch riêng cho từng case.
 
 Nhược điểm:
 
 - Phụ thuộc ComfyUI server port `8188`.
-- Phụ thuộc model files trong ComfyUI.
+- Phụ thuộc backend API đang chạy.
 - Runtime và memory phụ thuộc graph.
 
-Nếu ComfyUI tắt, mode này sẽ fail hoặc báo unavailable.
+Nếu ComfyUI tắt, workflow reproduce sẽ fail nhưng UI/API try-on production vẫn chạy trực tiếp qua backend.
 
 ## 7. Nên dùng mode nào trên UI
 
