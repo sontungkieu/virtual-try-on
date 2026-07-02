@@ -175,7 +175,7 @@ def build_api_prompt(
         },
         "4": {
             "class_type": "SaveImage",
-            "inputs": {"images": ["3", 0], "filename_prefix": f"{filename_prefix}/idm_result"},
+            "inputs": {"images": ["3", 0], "filename_prefix": f"{filename_prefix}/result"},
         },
         "5": {
             "class_type": "SaveImage",
@@ -260,7 +260,7 @@ def build_ui_workflow(
                 ],
                 title="Backend try-on API",
             ),
-            _ui_node(4, "SaveImage", (900, 0), [f"vton_omnitry_repro/{row['case_id']}/{engine_mode}/idm_result"], inputs=[{"name": "images", "type": "IMAGE", "link": 3}]),
+            _ui_node(4, "SaveImage", (900, 0), [f"vton_omnitry_repro/{row['case_id']}/{engine_mode}/result"], inputs=[{"name": "images", "type": "IMAGE", "link": 3}]),
             _ui_node(5, "SaveImage", (900, 180), [f"vton_omnitry_repro/{row['case_id']}/{engine_mode}/mask_preview"], inputs=[{"name": "images", "type": "IMAGE", "link": 4}]),
         ],
         "links": links,
@@ -339,7 +339,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build reproducible ComfyUI workflows for Omnitry innerwear cases.")
     parser.add_argument("--limit", type=int, default=None, help="Only export the first N discovered cases.")
     parser.add_argument("--case", dest="case_id", default=None, help="Only export one discovered case id.")
-    parser.add_argument("--engine-mode", default="idm_vton", choices=["idm_vton", "idm_mask_expanded", "idm_vton_flux", "idm_mask_expanded_flux"])
+    parser.add_argument(
+        "--engine-mode",
+        default="idm_vton",
+        choices=[
+            "idm_vton",
+            "idm_mask_expanded",
+            "idm_vton_flux",
+            "idm_mask_expanded_flux",
+            "klein_lora",
+            "idm_klein_hybrid",
+            "flux_redux_catvton",
+        ],
+    )
     parser.add_argument("--width", type=int, default=DEFAULT_OUTPUT_WIDTH)
     parser.add_argument("--height", type=int, default=DEFAULT_OUTPUT_HEIGHT)
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS)

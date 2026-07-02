@@ -16,6 +16,7 @@ export type EngineMode =
   | "idm_mask_expanded_flux"
   | "flux_redux_catvton"
   | "klein_lora"
+  | "idm_klein_hybrid"
   | "catvton";
 export type PromptVariant = "default" | "strong_remove_old_garment" | "identity_strict";
 export type StageStatus = "pending" | "running" | "completed" | "skipped" | "failed" | "cancelled";

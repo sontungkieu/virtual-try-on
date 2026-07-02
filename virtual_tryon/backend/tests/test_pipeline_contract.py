@@ -153,6 +153,42 @@ def test_pipeline_masks_global_engine_output(monkeypatch, tmp_path):
     assert result.getpixel((0, 0)) == person.getpixel((0, 0))
 
 
+class HybridFakeEngine:
+    def __init__(self, color: tuple[int, int, int], name: str) -> None:
+        self.color = color
+        self.name = name
+
+    def run(self, inputs):
+        return TryOnResult(Image.new("RGB", inputs.person_image.size, self.color), {"engine": self.name})
+
+
+def test_idm_klein_hybrid_uses_idm_delta_for_klein_detail(monkeypatch, tmp_path):
+    from app.engines.idm_klein_hybrid_engine import IDMKleinHybridEngine
+
+    settings = configure_temp_storage(load_settings(), tmp_path)
+    storage = StorageService(settings.storage)
+    engine = IDMKleinHybridEngine(settings)
+    engine.idm_engine = HybridFakeEngine((40, 40, 40), "idm_vton")  # type: ignore[assignment]
+    engine.klein_engine = HybridFakeEngine((220, 40, 120), "klein_tryon_lora")  # type: ignore[assignment]
+    monkeypatch.setattr(pipeline_module, "create_tryon_engine", lambda _settings: engine)
+
+    request = make_request("hybrid_output")
+    request.engine_mode = "idm_klein_hybrid"
+    request.use_refiner = False
+    request.repair_mode = False
+    response = TryOnPipeline(settings, storage).run(request)
+
+    job_dir = settings.storage.outputs_dir / "hybrid_output"
+    result = Image.open(job_dir / "result.png").convert("RGB")
+    delta_mask = Image.open(job_dir / "hybrid_idm_delta_mask.png").convert("L")
+
+    assert response.status == "completed"
+    assert (job_dir / "hybrid_idm_base.png").exists()
+    assert (job_dir / "hybrid_klein_detail.png").exists()
+    assert max(delta_mask.getextrema()) > 0
+    assert bytes((220, 40, 120)) in result.tobytes()
+
+
 def test_pipeline_applies_resolution_and_step_overrides(tmp_path):
     settings = configure_temp_storage(load_settings(), tmp_path)
     settings.pipeline.engine = "mock"

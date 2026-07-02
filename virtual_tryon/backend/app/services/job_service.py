@@ -126,6 +126,8 @@ class JobService:
             return "mock" if self._engine == "mock" else "idm_vton"
         if request.engine_mode == "klein_lora":
             return "klein_tryon_lora"
+        if request.engine_mode == "idm_klein_hybrid":
+            return "mock" if self._engine == "mock" else "idm_klein_hybrid"
         if request.engine_mode == "flux_redux_catvton":
             return "comfyui_flux_redux"
         if request.engine_mode == "catvton":

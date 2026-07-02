@@ -2,6 +2,13 @@ import type { TryOnHistoryResponse, TryOnResult } from "../store/tryonStore";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
+export type HistoryGenderFilter = "all" | "man" | "woman";
+
+export type HistoryQueryOptions = {
+  gender?: HistoryGenderFilter;
+  successOnly?: boolean;
+};
+
 type ApiErrorPayload = {
   error?: {
     code?: string;
@@ -54,8 +61,11 @@ export async function cancelTryOnJob(jobId: string): Promise<TryOnResult> {
   return response.json();
 }
 
-export async function getTryOnHistory(limit = 20): Promise<TryOnHistoryResponse> {
-  const response = await fetch(`${API_BASE_URL}/tryon/history?limit=${limit}`);
+export async function getTryOnHistory(limit = 20, options: HistoryQueryOptions = {}): Promise<TryOnHistoryResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (options.gender && options.gender !== "all") params.set("gender", options.gender);
+  if (options.successOnly) params.set("success_only", "true");
+  const response = await fetch(`${API_BASE_URL}/tryon/history?${params.toString()}`);
   if (!response.ok) {
     return throwApiError(response, "History request failed");
   }

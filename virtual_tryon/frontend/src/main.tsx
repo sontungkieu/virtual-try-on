@@ -64,7 +64,11 @@ function App() {
       }
       return;
     }
-    if (value !== "klein_lora") return;
+    if (value !== "klein_lora" && value !== "idm_klein_hybrid") return;
+    if (value === "idm_klein_hybrid") {
+      setField("useRefiner", false);
+      setField("repairMode", false);
+    }
     if (state.steps >= 28) setField("steps", 4);
     if (state.outputWidth === 768 && state.outputHeight === 1024) {
       setField("outputWidth", 512);
@@ -231,6 +235,7 @@ function App() {
               <option value="idm_mask_expanded_flux">Expanded mask + FLUX</option>
               <option value="flux_redux_catvton">Flux Fill + Redux + CatVTON</option>
               <option value="klein_lora">Klein LoRA experimental</option>
+              <option value="idm_klein_hybrid">IDM + Klein hybrid</option>
               <option value="catvton">CatVTON baseline</option>
             </select>
           </label>

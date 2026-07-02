@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, UploadFile
 
@@ -35,6 +36,7 @@ MAX_OUTPUT_SIDE = 1536
 MAX_OUTPUT_PIXELS = 1024 * 1536
 MIN_STEPS = 4
 MAX_STEPS = 50
+HistoryGenderFilter = Literal["all", "man", "woman"]
 
 
 def _validate_generation_overrides(
@@ -110,6 +112,40 @@ def _artifact_if_exists(job_id: str, job_dir, name: str) -> str | None:
     if not path.exists():
         return None
     return build_artifact_url(job_id, name, get_settings().storage.public_outputs_prefix)
+
+
+def _history_item_gender(item: TryOnHistoryItem) -> str:
+    category = (item.config.category or "").lower()
+    if category.startswith("women_") or category == "women" or category == "women_bra" or "bra" in category:
+        return "woman"
+    if category.startswith("men_") or category == "men":
+        return "man"
+
+    search_text = " ".join(
+        value
+        for value in [
+            item.config.prompt,
+            item.inputs.person_url,
+            item.inputs.garment_url,
+            item.inputs.garment_top_url,
+            item.inputs.garment_bottom_url,
+            item.inputs.garment_dress_url,
+        ]
+        if value
+    ).lower()
+    if re.search(r"(^|[^a-z])(female|women|woman|bra)([^a-z]|$)", search_text):
+        return "woman"
+    if re.search(r"(^|[^a-z])(male|men|man)([^a-z]|$)", search_text):
+        return "man"
+    return "unknown"
+
+
+def _history_item_matches(item: TryOnHistoryItem, gender: HistoryGenderFilter, success_only: bool) -> bool:
+    if success_only and item.status != "completed":
+        return False
+    if gender == "all":
+        return True
+    return _history_item_gender(item) == gender
 
 
 def _history_item_from_dir(job_dir) -> TryOnHistoryItem | None:
@@ -224,6 +260,7 @@ async def create_tryon(
         "idm_mask_expanded_flux",
         "flux_redux_catvton",
         "klein_lora",
+        "idm_klein_hybrid",
         "catvton",
     }
     if engine_mode and engine_mode not in valid_engine_modes:
@@ -291,7 +328,11 @@ async def create_tryon(
 
 
 @router.get("/tryon/history", response_model=TryOnHistoryResponse)
-def list_tryon_history(limit: int = 20) -> TryOnHistoryResponse:
+def list_tryon_history(
+    limit: int = 20,
+    gender: HistoryGenderFilter = "all",
+    success_only: bool = False,
+) -> TryOnHistoryResponse:
     settings = get_settings()
     bounded_limit = max(1, min(limit, 100))
     output_root = settings.storage.outputs_dir
@@ -305,7 +346,7 @@ def list_tryon_history(limit: int = 20) -> TryOnHistoryResponse:
     items: list[TryOnHistoryItem] = []
     for job_dir in candidates:
         item = _history_item_from_dir(job_dir)
-        if item is not None:
+        if item is not None and _history_item_matches(item, gender, success_only):
             items.append(item)
         if len(items) >= bounded_limit:
             break

@@ -1510,7 +1510,16 @@ class VTONPhase2BackendTryOnAPI:
                     {"default": "women_underwear"},
                 ),
                 "engine_mode": (
-                    ["idm_vton", "idm_mask_expanded", "idm_vton_flux", "idm_mask_expanded_flux", "klein_lora", "catvton"],
+                    [
+                        "idm_vton",
+                        "idm_mask_expanded",
+                        "idm_vton_flux",
+                        "idm_mask_expanded_flux",
+                        "klein_lora",
+                        "idm_klein_hybrid",
+                        "flux_redux_catvton",
+                        "catvton",
+                    ],
                     {"default": "idm_vton"},
                 ),
                 "prompt": (

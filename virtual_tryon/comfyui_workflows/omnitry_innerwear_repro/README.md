@@ -2,9 +2,9 @@
 
 These ComfyUI workflows reproduce the adult, non-sexual innerwear try-on cases from `data/inputs/omnitry/output_omnitry`.
 
-Default engine: `idm_vton`
+Default engine: `idm_klein_hybrid`
 Default resolution: `512x768`
-Default steps: `8`
+Default steps: `4`
 
 ## Files
 

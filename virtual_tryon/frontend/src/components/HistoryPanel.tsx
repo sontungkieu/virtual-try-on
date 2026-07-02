@@ -1,9 +1,8 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getTryOnHistory, getTryOnJob, resolveAssetUrl } from "../lib/api";
+import { getTryOnHistory, getTryOnJob, resolveAssetUrl, type HistoryGenderFilter } from "../lib/api";
 import { TryOnHistoryItem, useTryOnStore } from "../store/tryonStore";
 
-type GenderFilter = "all" | "man" | "woman";
 const HISTORY_LIMIT = 100;
 
 function formatTime(value?: string | null) {
@@ -56,7 +55,7 @@ function inputImages(item: TryOnHistoryItem) {
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
 }
 
-function inferGender(item: TryOnHistoryItem): Exclude<GenderFilter, "all"> | "unknown" {
+function inferGender(item: TryOnHistoryItem): Exclude<HistoryGenderFilter, "all"> | "unknown" {
   const category = item.config.category?.toLowerCase() ?? "";
   if (category.startsWith("women_") || category === "women" || category === "women_bra" || category.includes("bra")) {
     return "woman";
@@ -80,7 +79,7 @@ function inferGender(item: TryOnHistoryItem): Exclude<GenderFilter, "all"> | "un
   return "unknown";
 }
 
-function matchesGenderFilter(item: TryOnHistoryItem, filter: GenderFilter) {
+function matchesGenderFilter(item: TryOnHistoryItem, filter: HistoryGenderFilter) {
   if (filter === "all") return true;
   return inferGender(item) === filter;
 }
@@ -91,13 +90,13 @@ export function HistoryPanel() {
   const setField = useTryOnStore((state) => state.setField);
   const [items, setItems] = useState<TryOnHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [genderFilter, setGenderFilter] = useState<GenderFilter>("all");
+  const [genderFilter, setGenderFilter] = useState<HistoryGenderFilter>("all");
   const [successOnly, setSuccessOnly] = useState(false);
 
   async function refresh() {
     setLoading(true);
     try {
-      const response = await getTryOnHistory(HISTORY_LIMIT);
+      const response = await getTryOnHistory(HISTORY_LIMIT, { gender: genderFilter, successOnly });
       setItems(response.items);
     } finally {
       setLoading(false);
@@ -120,7 +119,7 @@ export function HistoryPanel() {
     ) {
       void refresh();
     }
-  }, [resultJobId, resultStatus]);
+  }, [resultJobId, resultStatus, genderFilter, successOnly]);
 
   const filteredItems = items.filter((item) => {
     if (!matchesGenderFilter(item, genderFilter)) return false;
@@ -139,7 +138,7 @@ export function HistoryPanel() {
       </div>
       <div className="history-controls">
         <div className="history-segmented" role="group" aria-label="Gender filter">
-          {(["all", "man", "woman"] as GenderFilter[]).map((filter) => (
+          {(["all", "man", "woman"] as HistoryGenderFilter[]).map((filter) => (
             <button
               className={genderFilter === filter ? "active" : ""}
               type="button"

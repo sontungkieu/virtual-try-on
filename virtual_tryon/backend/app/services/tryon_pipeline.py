@@ -171,6 +171,10 @@ class TryOnPipeline:
         elif mode == "klein_lora":
             mode_settings.pipeline.engine = "klein_tryon_lora"
             mode_settings.klein_tryon_lora.enabled = True
+        elif mode == "idm_klein_hybrid":
+            mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "idm_klein_hybrid"
+            mode_settings.idm_vton.enabled = True
+            mode_settings.klein_tryon_lora.enabled = True
         elif mode == "catvton":
             mode_settings.pipeline.engine = "catvton"
         else:
@@ -186,6 +190,7 @@ class TryOnPipeline:
             "idm_mask_expanded_flux": EngineMode.IDM_MASK_EXPANDED_FLUX,
             "flux_redux_catvton": EngineMode.IDM_MASK_EXPANDED_FLUX,
             "klein_lora": EngineMode.KLEIN_LORA,
+            "idm_klein_hybrid": EngineMode.KLEIN_LORA,
             "catvton": EngineMode.CATVTON,
         }
         if request.engine_mode:
@@ -681,11 +686,11 @@ class TryOnPipeline:
         refine_notes = list(refine_masks.notes)
         core_engine_name = getattr(engine, "name", "unknown")
         engine_status = {
-            "idm_vton": "success" if core_engine_name in {"idm_vton", "mock"} else "skipped",
+            "idm_vton": "success" if core_engine_name in {"idm_vton", "mock", "idm_klein_hybrid"} else "skipped",
             "flux_refiner": "skipped",
             "comfyui_flux_redux": "success" if core_engine_name == "comfyui_flux_redux" else "skipped",
             "catvton": "success" if core_engine_name == "catvton" else "skipped",
-            "klein_lora": "success" if core_engine_name == "klein_tryon_lora" else "skipped",
+            "klein_lora": "success" if core_engine_name in {"klein_tryon_lora", "idm_klein_hybrid"} else "skipped",
         }
         refiner_status = "skipped"
         use_refiner = False if request.engine_mode == "flux_redux_catvton" else request.use_refiner or request.engine_mode in {
@@ -756,7 +761,7 @@ class TryOnPipeline:
         mask_metadata_path = self.storage.save_json(request.job_id, "mask_metadata.json", mask_metadata)
         active_engine_settings = (
             settings.idm_vton
-            if settings.pipeline.engine in {"idm_vton", "mock", "comfyui_flux_redux"}
+            if settings.pipeline.engine in {"idm_vton", "mock", "comfyui_flux_redux", "idm_klein_hybrid"}
             else getattr(settings, settings.pipeline.engine)
         )
         engine_config = {

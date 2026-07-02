@@ -5,6 +5,7 @@ from app.engines.adetailer_repair_engine import ADetailerRepairEngine
 from app.engines.catvton_engine import CatVTonEngine
 from app.engines.comfyui_flux_redux_engine import ComfyUIFluxReduxEngine
 from app.engines.flux_refiner_engine import FluxRefinerEngine
+from app.engines.idm_klein_hybrid_engine import IDMKleinHybridEngine
 from app.engines.idm_vton_engine import IDMVTonEngine
 from app.engines.klein_tryon_lora_engine import KleinTryOnLoraEngine
 from app.engines.mock_engine import MockRefinerEngine, MockTryOnEngine
@@ -20,6 +21,8 @@ def create_tryon_engine(settings: Settings):
         return CatVTonEngine(settings.catvton)
     if engine_name == "klein_tryon_lora":
         return KleinTryOnLoraEngine(settings.klein_tryon_lora)
+    if engine_name == "idm_klein_hybrid":
+        return IDMKleinHybridEngine(settings)
     if engine_name == "comfyui_flux_redux":
         return ComfyUIFluxReduxEngine(settings)
     raise ValueError(f"Unknown try-on engine: {engine_name}")
@@ -35,13 +38,22 @@ def create_repair_engine(settings: Settings):
     return ADetailerRepairEngine(settings.repair)
 
 
+def _selectable_engine_status_settings(settings: Settings) -> Settings:
+    status_settings = settings.model_copy(deep=True)
+    status_settings.idm_vton.enabled = True
+    status_settings.klein_tryon_lora.enabled = True
+    return status_settings
+
+
 def model_statuses(settings: Settings) -> dict[str, str]:
-    idm_engine = IDMVTonEngine(settings.idm_vton)
+    status_settings = _selectable_engine_status_settings(settings)
+    idm_engine = IDMVTonEngine(status_settings.idm_vton)
     engines = {
         "flux_refiner": FluxRefinerEngine(settings.flux_refiner),
         "comfyui_flux_redux": ComfyUIFluxReduxEngine(settings),
         "catvton": CatVTonEngine(settings.catvton),
-        "klein_tryon_lora": KleinTryOnLoraEngine(settings.klein_tryon_lora),
+        "klein_tryon_lora": KleinTryOnLoraEngine(status_settings.klein_tryon_lora),
+        "idm_klein_hybrid": IDMKleinHybridEngine(status_settings),
         "repair": ADetailerRepairEngine(settings.repair),
     }
     statuses = {"idm_vton": idm_engine.status()}

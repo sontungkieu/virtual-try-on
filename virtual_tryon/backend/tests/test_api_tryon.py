@@ -83,6 +83,39 @@ def test_tryon_accepts_adult_innerwear_categories(client, png_file, category, ga
     assert stages["refining"]["status"] == "skipped"
 
 
+def test_history_gender_filter_applies_before_limit(client, png_file):
+    api = TestClient(client)
+    women_response = api.post(
+        "/tryon",
+        data={"category": "women_underwear", "use_refiner": "false", "repair_mode": "false"},
+        files={
+            "person_image": png_file("woman.png", (170, 170, 170)),
+            "garment_bottom": png_file("brief.png", (220, 80, 120)),
+        },
+    )
+    assert women_response.status_code == 200
+    man_response = api.post(
+        "/tryon",
+        data={"category": "men_underwear", "use_refiner": "false", "repair_mode": "false"},
+        files={
+            "person_image": png_file("man.png", (170, 170, 170)),
+            "garment_bottom": png_file("brief.png", (80, 80, 220)),
+        },
+    )
+    assert man_response.status_code == 200
+
+    history = api.get("/tryon/history?limit=1&gender=woman")
+    assert history.status_code == 200
+    items = history.json()["items"]
+    assert len(items) == 1
+    assert items[0]["config"]["category"] == "women_underwear"
+
+    success_history = api.get("/tryon/history?limit=10&gender=man&success_only=true")
+    assert success_history.status_code == 200
+    assert success_history.json()["items"]
+    assert all(item["status"] == "completed" for item in success_history.json()["items"])
+
+
 def test_engine_mode_default_remains_idm(client, png_file):
     api = TestClient(client)
     response = api.post(
